@@ -7,6 +7,7 @@ double scaleWeight = 0;       // Current weight measured by the scale
 double setWeight = 0;         // Target weight set by the user
 double setCupWeight = 0;      // Weight of the cup set by the user
 double offset = 0;            // Offset for stopping grinding prior to reaching set weight
+double scaleFactor = LOADCELL_SCALE_FACTOR; // Load cell calibration factor
 bool scaleMode = false;       // Indicates if the scale is used in timer mode
 bool grindMode = false;       // Grinder mode: impulse (false) or continuous (true)
 bool grinderActive = false;   // Grinder state (on/off)
@@ -182,7 +183,7 @@ void setupScale() {
     digitalWrite(GRINDER_ACTIVE_PIN, 0);
 
     preferences.begin("scale", false);
-    double scaleFactor = preferences.getDouble("calibration", (double)LOADCELL_SCALE_FACTOR);
+    scaleFactor = preferences.getDouble("calibration", (double)LOADCELL_SCALE_FACTOR);
     setWeight = preferences.getDouble("setWeight", (double)COFFEE_DOSE_WEIGHT);
     offset = preferences.getDouble("offset", (double)COFFEE_DOSE_OFFSET);
     setCupWeight = preferences.getDouble("cup", (double)CUP_WEIGHT);

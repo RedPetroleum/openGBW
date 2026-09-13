@@ -61,7 +61,7 @@ void rotary_onButtonClick()
 
         // Use the display method from display.cpp
         showDebugModeStatus(debugMode);
-        menuItemsCount = debugMode ? 10 : 9;
+        menuItemsCount = debugMode ? 11 : 10;
         clickCount = 0; // Reset the click count
         return;         // Exit early to prevent other actions
     }
@@ -91,42 +91,49 @@ void rotary_onButtonClick()
             Serial.println("Calibration Menu");
             break;
         }
-        case 2: // Offset Menu
+        case 2: // Scale Factor Menu
+            scaleStatus = STATUS_IN_SUBMENU;
+            currentSetting = 10;
+            encoderValue = rotaryEncoder.readEncoder();
+            rotaryEncoder.setAcceleration(100); // Faster adjustment when turning quickly
+            Serial.println("Scale Factor Menu");
+            break;
+        case 3: // Offset Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 2;
             Serial.println("Offset Menu");
             break;
-        case 3: // Scale Mode Menu
+        case 4: // Scale Mode Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 3;
             Serial.println("Scale Mode Menu");
             break;
-        case 4: // Grinding Mode Menu
+        case 5: // Grinding Mode Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 4;
             Serial.println("Grind Mode Menu");
             break;
-        case 5: // Info Menu
+        case 6: // Info Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 5;
             Serial.println("Info Menu");
             break;
-        case 6: // Sleep Timer Menu
+        case 7: // Sleep Timer Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 8;
             Serial.println("Sleep Timer Menu");
             break;
-        case 7: // Exit
+        case 8: // Exit
             scaleStatus = STATUS_EMPTY;
             rotaryEncoder.setAcceleration(100);
             Serial.println("Exited Menu");
             break;
-        case 8: // Reset Menu
+        case 9: // Reset Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 6;
             Serial.println("Reset Menu");
             break;
-        case 9: // Debug Menu
+        case 10: // Debug Menu
             if (debugMode)
             {
                 scaleStatus = STATUS_IN_SUBMENU;
@@ -167,11 +174,19 @@ void rotary_onButtonClick()
         }
         case 1: // Calibration Menu
         {
-            double newCalibrationValue = preferences.getDouble("calibration", 1.0) * (scaleWeight / 100);
-            preferences.begin("scale", false);
-            preferences.putDouble("calibration", newCalibrationValue);
-            preferences.end();
-            loadcell.set_scale(newCalibrationValue);
+            // Ensure a weight is actually on the scale, otherwise the factor would collapse to ~0
+            if (scaleWeight > 10)
+            {
+                scaleFactor = scaleFactor * (scaleWeight / 100);
+                preferences.begin("scale", false);
+                preferences.putDouble("calibration", scaleFactor);
+                preferences.end();
+                loadcell.set_scale(scaleFactor);
+            }
+            else
+            {
+                Serial.println("Failsafe: No calibration weight detected");
+            }
             scaleStatus = STATUS_IN_MENU;
             currentSetting = -1;
             break;
@@ -205,11 +220,7 @@ void rotary_onButtonClick()
         }
         case 5: // Info Menu
         {
-            displayLock = true;
-            showInfoMenu(); // Display info menu
-            delay(3000);
-            displayLock = false;
-            exitToMenu();
+            exitToMenu(); // Info is shown while in the submenu, click returns to menu
             break;
         }
         case 6: // Reset Menu
@@ -217,7 +228,8 @@ void rotary_onButtonClick()
             if (greset)
             {
                 preferences.begin("scale", false);
-                preferences.putDouble("calibration", (double)LOADCELL_SCALE_FACTOR);
+                scaleFactor = (double)LOADCELL_SCALE_FACTOR;
+                preferences.putDouble("calibration", scaleFactor);
                 setWeight = (double)COFFEE_DOSE_WEIGHT;
                 preferences.putDouble("setWeight", (double)COFFEE_DOSE_WEIGHT);
                 offset = (double)COFFEE_DOSE_OFFSET;
@@ -229,7 +241,7 @@ void rotary_onButtonClick()
                 grindMode = false;
                 preferences.putBool("grindMode", false);
                 preferences.putUInt("shotCount", 0);
-                loadcell.set_scale((double)LOADCELL_SCALE_FACTOR);
+                loadcell.set_scale(scaleFactor);
                 preferences.end();
             }
             scaleStatus = STATUS_IN_MENU;
@@ -279,6 +291,16 @@ void rotary_onButtonClick()
                 }
             }
             exitToMenu();
+            break;
+        }
+        case 10: // Scale Factor Menu
+        {
+            preferences.begin("scale", false);
+            preferences.putDouble("calibration", scaleFactor);
+            preferences.end();
+            rotaryEncoder.setAcceleration(0);
+            scaleStatus = STATUS_IN_MENU;
+            currentSetting = -1;
             break;
         }
         }
@@ -335,6 +357,18 @@ void rotary_loop()
                 if (abs(offset) >= setWeight)
                 {
                     offset = setWeight; // Prevent nonsensical offsets
+                }
+            }
+            else if (currentSetting == 10)
+            { // Scale factor menu, applied immediately so the live weight can be checked
+                int delta = newValue - encoderValue;
+                encoderValue = newValue;
+                if (abs(delta) < 1000) // Ignore jumps from encoder boundary wrap-around
+                {
+                    scaleFactor += delta * encoderDir;
+                    if (scaleFactor < 1)
+                        scaleFactor = 1; // Scale factor must never be zero
+                    loadcell.set_scale(scaleFactor);
                 }
             }
             else if (currentSetting == 3)

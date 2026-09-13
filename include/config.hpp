@@ -85,6 +85,7 @@ extern bool grindMode;
 extern bool greset;
 extern int menuItemsCount;
 extern double setCupWeight;
+extern double scaleFactor;
 extern MenuItem menuItems[];
 extern int currentMenuItem;
 extern int currentSetting;
