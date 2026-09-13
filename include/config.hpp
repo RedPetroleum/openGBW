@@ -48,7 +48,7 @@ extern bool debugMode;
 #define LOADCELL_DOUT_PIN 19
 #define LOADCELL_SCK_PIN 18
 
-#define LOADCELL_SCALE_FACTOR 7207 // war 7351
+#define LOADCELL_SCALE_FACTOR 1000 // war 7207, davor 7351
 
 #define TARE_MEASURES 20 // use the average of measure for taring
 #define SIGNIFICANT_WEIGHT_CHANGE 10 // 5 grams changes are used to detect a significant change

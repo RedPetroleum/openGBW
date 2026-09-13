@@ -11,7 +11,7 @@ AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(
     ROTARY_ENCODER_STEPS);
 
 // Vars
-int encoderDir = 1;   // Direction of the rotary encoder
+int encoderDir = -1;  // Direction of the rotary encoder (war 1)
 int encoderValue = 0; // Current value of the rotary encoder
 static int clickCount = 0;
 const unsigned long clickThreshold = 500; // 500ms max interval for rapid clicks
@@ -385,7 +385,7 @@ void rotary_loop()
             }
             else if (currentSetting == 8)
             {                                                  // Sleep Timer menu
-                sleepTime += (newValue - encoderValue) * 1000; // Adjust by seconds
+                sleepTime += (newValue - encoderValue) * encoderDir * 1000; // Adjust by seconds
                 if (sleepTime < 5000)
                     sleepTime = 5000; // Minimum sleep time: 5 seconds
                 if (sleepTime > 600000)
