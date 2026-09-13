@@ -132,7 +132,6 @@ void scaleStatusLoop(void *p) {
                     startedGrindingAt = millis();
                     continue;
                 }
-                /*
                 if (millis() - startedGrindingAt > MAX_GRINDING_TIME && !scaleMode) {
                     grinderToggle();
                     scaleStatus = STATUS_GRINDING_FAILED;
@@ -150,7 +149,6 @@ void scaleStatusLoop(void *p) {
                     scaleStatus = STATUS_GRINDING_FAILED;
                     continue;
                 }
-                */
                 double currentOffset = offset;
                 if (scaleMode) {
                     currentOffset = 0;
