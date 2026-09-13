@@ -6,40 +6,14 @@ A grind by weight scale for the Eureka Mignon MCI. It works without a relay and 
 
 ### Differences
 
-Changes I made on top of the version this is based on (see [Origin](#origin)):
+Changes on top of the version this is based on (see [Origin](#origin)):
 
-**Grinding**
-
-- Two dosing cups: grinding starts when either of them is placed on the scale
-- Grinding aborts again on timeout (60 seconds), missing progress, a removed cup or a scale error. The reason is shown on the display and the error screen is left by pressing the knob
-- The grinder no longer stops early because of single reading spikes (vibration), and the display timer no longer interrupts a running grind
-- Fixed a wrong "Cup removed" abort caused by empty measurement windows
-
-**Calibration**
-
-- New "Scale Factor" menu: turn the knob while watching the live weight and press to save. Replaces the calibration with a 100g weight
-- The scale factor is shown in the Info Menu
-
-**Display and operation**
-
-- Measured and target weight on the main screen are aligned on the decimal point
-- Reworked menu: Exit is the first item, the cup weight menus can be left by turning the knob, continuous is the default grinding mode
-- Reversed direction of the rotary encoder
-- Sleep timer fixed: the time set in the menu is used everywhere and kept after a restart. Tapping the scale, turning or pressing the knob wakes the display without changing anything
-
-**Debug Menu**
-
-- Weight Chart: graph of the last 100 scale readings
-- Weight History: shot number, grinding time and used offset of the last 10 grinds, kept after power off
-- The shot counter starts at 299
-
-**Games**
-
-- Games menu with two games that use the rotary encoder and the pressure on the scale as controls: Comet Blaster and Curve Tracer
-
-**Defaults for my setup**
-
-- Cup weights 396.1g and 76.3g, scale factor 1760 (1kg load cell), dose 17.5g, offset -1.67g, grinder on GPIO 25
+- **Games:** Comet Blaster and Curve Tracer, controlled with the knob and the pressure on the scale
+- **Grinding:** two dosing cups; aborts on timeout (60 seconds), missing progress, a removed cup or a scale error, with the reason shown on the display; no early stop caused by vibration spikes and no interruption by the display timer
+- **Calibration:** "Scale Factor" menu to calibrate while watching the live weight (replaces the calibration with a 100g weight), scale factor shown in the Info Menu
+- **Operation:** weights aligned on the decimal point, reworked menu (Exit first, cup weight menus can be left by turning), reversed encoder direction, continuous as default grinding mode, fixed sleep timer that is kept after a restart and wakes the display when the scale is tapped
+- **Debug Menu:** Weight Chart of the last 100 readings, Weight History of the last 10 grinds
+- **Defaults for my setup:** cup weights 396.1g and 76.3g, scale factor 1760 (1kg load cell), dose 17.5g, offset -1.67g, grinder on GPIO 25
 
 -----------
 
@@ -48,6 +22,8 @@ Changes I made on top of the version this is based on (see [Origin](#origin)):
 **Power supply:** my version of the MCI has a 3.0V output, which I use to power the ESP32. It works, even though the ESP32 actually needs 3.3V. WiFi does not work at this voltage, though, which is why this version is not based on SyButter's latest state with WiFi and web server (see [Origin](#origin)).
 
 **Starting the grinder:** the grinder is started by the switch at the top, below the coffee outlet, which carries a 12V signal. The ESP32 is wired in parallel to this switch: it drives a transistor from GPIO 25 through a small resistor, and the transistor switches the 12V signal just like the switch does. No relay is needed.
+
+**Manual mode:** openGBW only works when the MCI is set to manual mode. The grinder can still be used as before after installing openGBW: manually with the switch or with the timer.
 
 Opening the grinder and working on its electronics is at your own risk.
 
@@ -70,7 +46,7 @@ This project has been passed on through several forks:
 2) flash the firmware onto an ESP32
 3) connect the display, load cell and rotary encoder to the ESP32 and connect the grinder (on the Mignon MCI see [Hardware](#hardware-on-the-mignon-mci), other grinders may need a relay). The pins are defined in `include/config.hpp`
 4) go into the menu by pressing the button of the rotary encoder and set your initial offset. -2g is a good enough starting value for a Mignon XL
-5) if you're using the Mignon's push button to activate the grinder set grinding mode to impulse. If you're connected directly to the motor relay use continuous.
+5) set the grinding mode: on the Mignon MCI use continuous (the default) and set the grinder to manual mode (see [Hardware](#hardware-on-the-mignon-mci)). Use impulse if your grinder needs a short pulse to start and another one to stop.
 6) if you only want to use the scale to check your weight when single dosing, set scale mode to scale only. This will not trigger any relay switching and start a timer when the weight begins to increase. If you'd like to build your own brew scale with timer, this is also the mode to use.
 7) calibrate your load cell: open "Scale Factor", place a known weight (e.g. 100g) on the scale and turn the knob until the live weight matches, then press to save
 8) set your dosing cup weights: open "Cup Weight 1", place the empty cup on the scale and press. Repeat with "Cup Weight 2" if you use a second cup
