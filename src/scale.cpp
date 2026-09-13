@@ -7,6 +7,7 @@ double scaleWeight = 0;       // Current weight measured by the scale
 double previousScaleWeight = 0; // Weight of the reading before the current one
 double setWeight = 0;         // Target weight set by the user
 double setCupWeight = 0;      // Weight of the cup set by the user
+double setCupWeight2 = 0;     // Weight of the second cup set by the user
 double offset = 0;            // Offset for stopping grinding prior to reaching set weight
 double scaleFactor = LOADCELL_SCALE_FACTOR; // Load cell calibration factor
 bool scaleMode = false;       // Indicates if the scale is used in timer mode
@@ -74,6 +75,12 @@ void grinderToggle() {
     }
 }
 
+// Checks if the given cup has been resting on the scale for the last second
+bool isCupDetected(double cupWeight) {
+    return ABS(weightHistory.minSince((int64_t)millis() - 1000) - cupWeight) < CUP_DETECTION_TOLERANCE &&
+           ABS(weightHistory.maxSince((int64_t)millis() - 1000) - cupWeight) < CUP_DETECTION_TOLERANCE;
+}
+
 // Task to manage the status of the scale
 void scaleStatusLoop(void *p) {
     for (;;) {
@@ -87,8 +94,7 @@ void scaleStatusLoop(void *p) {
                 if (millis() - lastTareAt > TARE_MIN_INTERVAL && ABS(tenSecAvg) > 0.2 && tenSecAvg < 3 && scaleWeight < 3) {
                     lastTareAt = 0; // Retare if conditions are met
                 }
-                if (ABS(weightHistory.minSince((int64_t)millis() - 1000) - setCupWeight) < CUP_DETECTION_TOLERANCE &&
-                    ABS(weightHistory.maxSince((int64_t)millis() - 1000) - setCupWeight) < CUP_DETECTION_TOLERANCE) {
+                if (isCupDetected(setCupWeight) || isCupDetected(setCupWeight2)) {
                     cupWeightEmpty = weightHistory.averageSince((int64_t)millis() - 500);
                     scaleStatus = STATUS_GRINDING_IN_PROGRESS;
                     if (!scaleMode) {
@@ -195,6 +201,7 @@ void setupScale() {
     setWeight = preferences.getDouble("setWeight", (double)COFFEE_DOSE_WEIGHT);
     offset = preferences.getDouble("offset", (double)COFFEE_DOSE_OFFSET);
     setCupWeight = preferences.getDouble("cup", (double)CUP_WEIGHT);
+    setCupWeight2 = preferences.getDouble("cup2", (double)CUP_WEIGHT_2);
     scaleMode = preferences.getBool("scaleMode", false);
     grindMode = preferences.getBool("grindMode", false);
     shotCount = preferences.getUInt("shotCount", SHOT_COUNT_DEFAULT);

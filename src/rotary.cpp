@@ -61,7 +61,7 @@ void rotary_onButtonClick()
 
         // Use the display method from display.cpp
         showDebugModeStatus(debugMode);
-        menuItemsCount = debugMode ? 11 : 10;
+        menuItemsCount = debugMode ? 12 : 11;
         clickCount = 0; // Reset the click count
         return;         // Exit early to prevent other actions
     }
@@ -79,61 +79,66 @@ void rotary_onButtonClick()
         // Navigate through the menu items
         switch (currentMenuItem)
         {
-        case 0: // Cup Weight Menu
+        case 0: // Cup Weight 1 Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 0;
-            Serial.println("Cup Menu");
+            Serial.println("Cup 1 Menu");
             break;
-        case 1: // Calibration Menu
+        case 1: // Cup Weight 2 Menu
+            scaleStatus = STATUS_IN_SUBMENU;
+            currentSetting = 11;
+            Serial.println("Cup 2 Menu");
+            break;
+        case 2: // Calibration Menu
         {
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 1;
             Serial.println("Calibration Menu");
             break;
         }
-        case 2: // Scale Factor Menu
+        case 3: // Scale Factor Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 10;
             encoderValue = rotaryEncoder.readEncoder();
             rotaryEncoder.setAcceleration(100); // Faster adjustment when turning quickly
             Serial.println("Scale Factor Menu");
             break;
-        case 3: // Offset Menu
+        case 4: // Offset Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 2;
             Serial.println("Offset Menu");
             break;
-        case 4: // Scale Mode Menu
+        case 5: // Scale Mode Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 3;
             Serial.println("Scale Mode Menu");
             break;
-        case 5: // Grinding Mode Menu
+        case 6: // Grinding Mode Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 4;
             Serial.println("Grind Mode Menu");
             break;
-        case 6: // Info Menu
+        case 7: // Info Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 5;
             Serial.println("Info Menu");
             break;
-        case 7: // Sleep Timer Menu
+        case 8: // Sleep Timer Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 8;
             Serial.println("Sleep Timer Menu");
             break;
-        case 8: // Exit
+        case 9: // Exit
             scaleStatus = STATUS_EMPTY;
             rotaryEncoder.setAcceleration(100);
             Serial.println("Exited Menu");
             break;
-        case 9: // Reset Menu
+        case 10: // Reset Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 6;
             Serial.println("Reset Menu");
             break;
-        case 10: // Debug Menu
+        case 11: // Debug Menu
             if (debugMode)
             {
                 scaleStatus = STATUS_IN_SUBMENU;
@@ -148,19 +153,22 @@ void rotary_onButtonClick()
         // Handle submenu actions based on the current setting
         switch (currentSetting)
         {
-        case 0: // Cup Weight Menu
+        case 0:  // Cup Weight 1 Menu
+        case 11: // Cup Weight 2 Menu
         {
             if (scaleWeight > 30)
             { // Ensure cup weight is valid
-                setCupWeight = scaleWeight;
-                Serial.println(setCupWeight);
+                bool isFirstCup = currentSetting == 0;
+                double &cupWeight = isFirstCup ? setCupWeight : setCupWeight2;
+                cupWeight = scaleWeight;
+                Serial.println(cupWeight);
 
                 preferences.begin("scale", false);
-                preferences.putDouble("cup", setCupWeight);
+                preferences.putDouble(isFirstCup ? "cup" : "cup2", cupWeight);
                 preferences.end();
 
                 displayLock = true;
-                showCupWeightSetScreen(setCupWeight); // Show confirmation
+                showCupWeightSetScreen(cupWeight); // Show confirmation
                 displayLock = false;
 
                 exitToMenu();
@@ -236,6 +244,8 @@ void rotary_onButtonClick()
                 preferences.putDouble("offset", (double)COFFEE_DOSE_OFFSET);
                 setCupWeight = (double)CUP_WEIGHT;
                 preferences.putDouble("cup", (double)CUP_WEIGHT);
+                setCupWeight2 = (double)CUP_WEIGHT_2;
+                preferences.putDouble("cup2", (double)CUP_WEIGHT_2);
                 scaleMode = false;
                 preferences.putBool("scaleMode", false);
                 grindMode = false;

@@ -43,6 +43,7 @@ extern bool debugMode;
 #define STATUS_INFO_MENU 8
 
 #define CUP_WEIGHT 396.1 //war 292
+#define CUP_WEIGHT_2 76.3 // second cup
 #define CUP_DETECTION_TOLERANCE 10 // 5 grams tolerance above or bellow cup weight to detect it
 
 #define LOADCELL_DOUT_PIN 19
@@ -87,6 +88,7 @@ extern bool grindMode;
 extern bool greset;
 extern int menuItemsCount;
 extern double setCupWeight;
+extern double setCupWeight2;
 extern double scaleFactor;
 extern MenuItem menuItems[];
 extern int currentMenuItem;

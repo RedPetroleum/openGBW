@@ -67,22 +67,23 @@ void WeightPrintToScreen(double weight, u8g2_uint_t y)
 // Menu items for user interface
 int currentMenuItem = 0;      // Index of the current menu item
 int currentSetting;           // Index of the current setting being adjusted
-int menuItemsCount = debugMode ? 11 : 10;      // Total number of menu items
+int menuItemsCount = debugMode ? 12 : 11;      // Total number of menu items
 
  // Menu items for settings and calibration
-MenuItem menuItems[11] = {
-    {0, false, "Cup weight", 1, &setCupWeight},
-    {1, false, "Calibrate", 0},
-    {2, false, "Scale Factor", 1, &scaleFactor},
-    {3, false, "Offset", 0.1, &offset},
-    {4, false, "Scale Mode", 0},
-    {5, false, "Grinding Mode", 0},
-    {6, false, "Info Menu", 0},
-    {7, false, "Sleep Timer", 0},
-    {8, false, "Exit", 0},
-    {9, false, "Reset", 0},
+MenuItem menuItems[12] = {
+    {0, false, "Cup Weight 1", 1, &setCupWeight},
+    {1, false, "Cup Weight 2", 1, &setCupWeight2},
+    {2, false, "Calibrate", 0},
+    {3, false, "Scale Factor", 1, &scaleFactor},
+    {4, false, "Offset", 0.1, &offset},
+    {5, false, "Scale Mode", 0},
+    {6, false, "Grinding Mode", 0},
+    {7, false, "Info Menu", 0},
+    {8, false, "Sleep Timer", 0},
+    {9, false, "Exit", 0},
+    {10, false, "Reset", 0},
     // Debug menu placeholder (conditional)
-    {10, false, "Debug Menu", 0} // Visible only if debugMode is true
+    {11, false, "Debug Menu", 0} // Visible only if debugMode is true
 };
 
 int debugMenuItemsCount = 3; // Number of items in the Debug Menu
@@ -123,9 +124,9 @@ void showDebugMenu()
 
 void setupMenuItems() {
     if (debugMode) {
-        menuItemsCount = 11; // Include Debug Menu
+        menuItemsCount = 12; // Include Debug Menu
     } else {
-        menuItemsCount = 10; // Exclude Debug Menu
+        menuItemsCount = 11; // Exclude Debug Menu
     }
 }
 
@@ -257,13 +258,13 @@ void showGrindModeMenu()
 }
 
 // Function to display the cup weight adjustment menu
-void showCupMenu()
+void showCupMenu(char const *title)
 {
   char buf[16];
   screen.clearBuffer();
   screen.setFontPosTop();
   screen.setFont(u8g2_font_7x14B_tf);                // Set the font for the menu title
-  CenterPrintToScreen("Cup Weight", 0);              // Print the menu title
+  CenterPrintToScreen(title, 0);                     // Print the menu title
   screen.setFont(u8g2_font_7x13_tr);                 // Set the font for the instructions
   snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight); // Format the scale weight
   CenterPrintToScreen(buf, 19);                      // Print the scale weight
@@ -334,7 +335,7 @@ void showInfoMenu() {
 
     // Display cup weight (smaller font so four lines fit)
     screen.setFont(u8g2_font_6x10_tr);
-    snprintf(buf, sizeof(buf), "Cup Weight: %3.1fg", setCupWeight);
+    snprintf(buf, sizeof(buf), "Cups: %.1f/%.1fg", setCupWeight, setCupWeight2);
     LeftPrintToScreen(buf, 16);
 
     // Display offset
@@ -372,7 +373,11 @@ void showSetting()
 {
   if (currentSetting == 0)
   {
-    showCupMenu();
+    showCupMenu("Cup Weight 1");
+  }
+  else if (currentSetting == 11)
+  {
+    showCupMenu("Cup Weight 2");
   }
   else if (currentSetting == 1)
   {
