@@ -289,7 +289,8 @@ void rotary_onButtonClick()
             currentSetting = -1;
             break;
         }
-        case 12: // Weight History view
+        case 12: // Weight Chart view
+        case 13: // Weight History view
         {
             currentSetting = 9; // Back to the Debug Menu
             break;
@@ -345,6 +346,12 @@ void rotary_loop()
             { // Cup weight menus: turning leaves without saving
                 encoderValue = newValue;
                 exitToMenu();
+            }
+            else if (currentSetting == 13)
+            { // Weight History: scroll through the recorded grinds
+                grindHistoryScroll += (newValue - encoderValue) * -encoderDir;
+                encoderValue = newValue;
+                grindHistoryScroll = constrain(grindHistoryScroll, 0, max(0, grindHistoryCount - GRIND_HISTORY_ROWS));
             }
             else if (currentSetting == 2)
             { // Offset menu

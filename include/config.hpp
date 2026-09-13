@@ -26,6 +26,16 @@ class MenuItem
         double increment;
         double *value;
 };
+// One finished grind, stored for the Weight History in the Debug Menu
+struct GrindRecord
+{
+    uint32_t shot;   // shot count after this grind
+    float duration;  // grinding time in seconds
+    float offset;    // offset used for this grind in grams
+};
+#define GRIND_HISTORY_SIZE 10 // number of grinds kept in the Weight History
+#define GRIND_HISTORY_ROWS 5  // number of grinds visible at once in the Weight History
+
 // Debug mode toggle
 #define DEBUG_MODE true;
 extern bool debugMode;
@@ -98,4 +108,7 @@ extern bool screenJustWoke;
 extern unsigned int shotCount;
 extern int debugMenuItemsCount;
 extern int currentDebugMenuItem;
-extern MathBuffer<double, 100> weightHistory; 
+extern MathBuffer<double, 100> weightHistory;
+extern GrindRecord grindHistory[GRIND_HISTORY_SIZE];
+extern int grindHistoryCount;
+extern int grindHistoryScroll; 

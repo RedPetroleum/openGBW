@@ -85,13 +85,15 @@ MenuItem menuItems[11] = {
     {10, false, "Debug Menu", 0} // Visible only if debugMode is true
 };
 
-int debugMenuItemsCount = 4; // Number of items in the Debug Menu
+int debugMenuItemsCount = 5; // Number of items in the Debug Menu
 int currentDebugMenuItem = 0; // Current selection in the Debug Menu
-MenuItem debugMenuItems[4] = {
+int grindHistoryScroll = 0;   // First visible entry in the Weight History
+MenuItem debugMenuItems[5] = {
     {0, false, "Exit", 0},
     {1, false, "Sim Grind", 0},
-    {2, false, "Weight Hist", 0},
-    {3, false, "Zero Shot Count", 0}
+    {2, false, "Weight Chart", 0},
+    {3, false, "Weight History", 0},
+    {4, false, "Zero Shot Count", 0}
 };
 
 void showDebugMenu()
@@ -288,8 +290,8 @@ void showCupWeightSetScreen(double cupWeight)
   delay(2000); // Block for 2 seconds to ensure the screen stays visible
 }
 
-// Function to display the recorded weight history as a line graph (newest reading on the right)
-void showWeightHistory()
+// Function to display the recorded weights as a line graph (newest reading on the right)
+void showWeightChart()
 {
   double values[100];
   int count = 0;
@@ -337,6 +339,33 @@ void showWeightHistory()
     int y1 = graphBottom - (values[i] - minValue) / range * (graphBottom - graphTop);
     int y2 = graphBottom - (values[i + 1] - minValue) / range * (graphBottom - graphTop);
     screen.drawLine(x1, y1, x2, y2);
+  }
+  screen.sendBuffer();
+}
+
+// Function to display duration and offset of the last grinds (newest first, turn to scroll)
+void showGrindHistory()
+{
+  char buf[32];
+  screen.clearBuffer();
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_6x10_tr);
+  CenterPrintToScreen("Weight History", 0);
+  if (grindHistoryCount == 0)
+  {
+    CenterPrintToScreen("No grinds yet", 30);
+    screen.sendBuffer();
+    return;
+  }
+  for (int row = 0; row < GRIND_HISTORY_ROWS; row++)
+  {
+    int index = grindHistoryScroll + row;
+    if (index >= grindHistoryCount)
+      break;
+    snprintf(buf, sizeof(buf), "#%lu", (unsigned long)grindHistory[index].shot);
+    LeftPrintToScreen(buf, 12 + row * 10);
+    snprintf(buf, sizeof(buf), "%.1fs %6.2fg", grindHistory[index].duration, grindHistory[index].offset);
+    RightPrintToScreen(buf, 12 + row * 10);
   }
   screen.sendBuffer();
 }
@@ -452,7 +481,11 @@ void showSetting()
   }
   else if (currentSetting == 12)
   {
-    showWeightHistory();
+    showWeightChart();
+  }
+  else if (currentSetting == 13)
+  {
+    showGrindHistory();
   }
 
 }
@@ -478,12 +511,18 @@ void handleDebugMenuAction()
         exitToMenu();
         break;
 
-    case 2: // Show Weight History
-        Serial.println("Displaying Weight History...");
+    case 2: // Show Weight Chart
+        Serial.println("Displaying Weight Chart...");
         currentSetting = 12; // Graph is drawn by the display task, click returns to the Debug Menu
         return;
 
-    case 3: // Reset Shot Count
+    case 3: // Show Weight History (duration and offset of the last grinds)
+        Serial.println("Displaying Weight History...");
+        grindHistoryScroll = 0;
+        currentSetting = 13; // Drawn by the display task, turn to scroll, click returns to the Debug Menu
+        return;
+
+    case 4: // Reset Shot Count
       Serial.println("Resetting Shot Count...");
       shotCount = 0;
       preferences.begin("scale", false);

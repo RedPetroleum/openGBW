@@ -18,6 +18,10 @@ unsigned int shotCount;
 // Buffer for storing recent weight history
 MathBuffer<double, 100> weightHistory;
 
+// Last finished grinds, newest first
+GrindRecord grindHistory[GRIND_HISTORY_SIZE];
+int grindHistoryCount = 0;
+
 // Timing and status variables
 unsigned long scaleLastUpdatedAt = 0;  // Timestamp of the last scale update
 unsigned long lastSignificantWeightChangeAt = 0; // Timestamp of the last significant weight change
@@ -72,6 +76,17 @@ void grinderToggle() {
             delay(100);
             digitalWrite(GRINDER_ACTIVE_PIN, 0);
         }
+    }
+}
+
+// Adds a finished grind to the history (newest first); caller saves it to preferences
+void addGrindRecord(uint32_t shot, float duration, float usedOffset) {
+    for (int i = GRIND_HISTORY_SIZE - 1; i > 0; i--) {
+        grindHistory[i] = grindHistory[i - 1];
+    }
+    grindHistory[0] = {shot, duration, usedOffset};
+    if (grindHistoryCount < GRIND_HISTORY_SIZE) {
+        grindHistoryCount++;
     }
 }
 
@@ -159,14 +174,18 @@ void scaleStatusLoop(void *p) {
                     scaleStatus = STATUS_EMPTY;
                     continue;
                 } else if (currentWeight != setWeight + cupWeightEmpty && millis() - finishedGrindingAt > 1500 && newOffset) {
+                    double usedOffset = offset;
                     offset += setWeight + cupWeightEmpty - currentWeight;
                     if (ABS(offset) >= setWeight) {
                         offset = COFFEE_DOSE_OFFSET;
                     }
                     shotCount++;
+                    addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0, usedOffset);
                     preferences.begin("scale", false);
                     preferences.putDouble("offset", offset);
                     preferences.putUInt("shotCount", shotCount);
+                    preferences.putBytes("grindHist", grindHistory, sizeof(grindHistory));
+                    preferences.putInt("grindHistN", grindHistoryCount);
                     preferences.end();
                     newOffset = false;
                 }
@@ -205,6 +224,10 @@ void setupScale() {
     scaleMode = preferences.getBool("scaleMode", false);
     grindMode = preferences.getBool("grindMode", true);
     shotCount = preferences.getUInt("shotCount", SHOT_COUNT_DEFAULT);
+    if (preferences.getBytesLength("grindHist") == sizeof(grindHistory)) {
+        preferences.getBytes("grindHist", grindHistory, sizeof(grindHistory));
+        grindHistoryCount = constrain(preferences.getInt("grindHistN", 0), 0, GRIND_HISTORY_SIZE);
+    }
     preferences.end();
 
     loadcell.set_scale(scaleFactor);
