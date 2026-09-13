@@ -524,9 +524,15 @@ void updateDisplay(void *parameter)
 
         screen.setFont(u8g2_font_7x13_tf);
         screen.setFontPosCenter();
-        screen.setCursor(5, 50);
-        snprintf(buf2, sizeof(buf2), "Set: %3.1fg", setWeight);
-        LeftPrintToScreen(buf2, 50);
+        snprintf(buf2, sizeof(buf2), "%3.1fg", setWeight);
+        {
+          // Center the set weight number like the measured weight, "Set: " sits left of it
+          u8g2_uint_t numberX = 128 / 2 - screen.getStrWidth(buf2) / 2;
+          u8g2_uint_t labelWidth = screen.getStrWidth("Set: 0") - screen.getStrWidth("0");
+          screen.setCursor(numberX - labelWidth, 50);
+          screen.print("Set: ");
+          screen.print(buf2);
+        }
       }
       else if (scaleStatus == STATUS_GRINDING_FAILED)
       {

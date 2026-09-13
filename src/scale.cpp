@@ -197,7 +197,7 @@ void setupScale() {
     setCupWeight = preferences.getDouble("cup", (double)CUP_WEIGHT);
     scaleMode = preferences.getBool("scaleMode", false);
     grindMode = preferences.getBool("grindMode", false);
-    shotCount = preferences.getUInt("shotCount", 299);
+    shotCount = preferences.getUInt("shotCount", SHOT_COUNT_DEFAULT);
     preferences.end();
 
     loadcell.set_scale(scaleFactor);

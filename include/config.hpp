@@ -56,6 +56,7 @@ extern bool debugMode;
 #define COFFEE_DOSE_WEIGHT 17.5 //war 18
 #define COFFEE_DOSE_OFFSET -1.67 //war -2.5
 #define MAX_GRINDING_TIME 40000 // 20 seconds diff
+#define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
 #define GRINDING_FAILED_WEIGHT_TO_RESET 150 // force on balance need to be measured to reset grinding
 
 #define GRINDER_ACTIVE_PIN 25 // war 33

@@ -240,7 +240,8 @@ void rotary_onButtonClick()
                 preferences.putBool("scaleMode", false);
                 grindMode = false;
                 preferences.putBool("grindMode", false);
-                preferences.putUInt("shotCount", 0);
+                shotCount = SHOT_COUNT_DEFAULT;
+                preferences.putUInt("shotCount", shotCount);
                 loadcell.set_scale(scaleFactor);
                 preferences.end();
             }
