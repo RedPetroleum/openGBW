@@ -1,10 +1,8 @@
 #include "config.hpp"
 #include "rotary.hpp"
-#include "web_server.hpp"
 
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C screen(U8G2_R0);
 TaskHandle_t DisplayTask;
-extern String currentIPAddress;
 
 // Time in milliseconds after which the display sleeps (10 seconds)
 int sleepTime = SLEEP_AFTER_MS;
@@ -44,14 +42,6 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
   screen.print(str);                           // Print the text
 }
 
-//WEBSERVER
-void showIPAddress() {
-  screen.setFont(u8g2_font_5x8_tf); // Small font for IP display
-  screen.setCursor(2, 60);          // Position at bottom-left of the screen
-  screen.print("IP: ");
-  screen.print(currentIPAddress);
-}
-
 //MENU 
 
 // Menu items for user interface
@@ -67,7 +57,7 @@ MenuItem menuItems[10] = {
     {3, false, "Scale Mode", 0},
     {4, false, "Grinding Mode", 0},
     {5, false, "Info Menu", 0},
-    {6, false, "Grind Trigger", 0},
+    {6, false, "Sleep Timer", 0},
     {7, false, "Exit", 0},
     {8, false, "Reset", 0},
     // Debug menu placeholder (conditional)
@@ -152,25 +142,24 @@ void showMenu()
   screen.sendBuffer(); // Send the buffer to the display
 }
 
-void showGrindTriggerMenu() {
-  char buf[32];
-  screen.clearBuffer();
-  screen.setFontPosTop();
-  screen.setFont(u8g2_font_7x14B_tf);
+void showSleepTimerMenu() {
+    char buf[32];
+    screen.clearBuffer();
+    screen.setFontPosTop();
+    screen.setFont(u8g2_font_7x14B_tf);
 
-  // Display title
-  CenterPrintToScreen("Grind Trigger Mode", 0);
+    // Display title
+    CenterPrintToScreen("Adjust Sleep Timer", 0);
 
-  // Display current trigger mode
-  screen.setFont(u8g2_font_7x13_tr);
-  snprintf(buf, sizeof(buf), "Mode: %s", useButtonToGrind ? "Button" : "Cup");
-  CenterPrintToScreen(buf, 32);
+    // Display current sleep timer value in seconds
+    screen.setFont(u8g2_font_7x13_tr);
+    snprintf(buf, sizeof(buf), "Timer: %d sec", sleepTime / 1000); // Use `sleepTime` here
+    CenterPrintToScreen(buf, 32);
 
-  // Display instructions
-  LeftPrintToScreen("Press button to toggle", 50);
-  screen.sendBuffer();
+    // Display instructions
+    LeftPrintToScreen("Turn to adjust", 50);
+    screen.sendBuffer();
 }
-
 
 // Function to display the offset adjustment menu
 void showOffsetMenu()
@@ -305,9 +294,13 @@ void showInfoMenu() {
     // Display title
     CenterPrintToScreen("System Info", 0);
 
+    // Display cup weight
+    screen.setFont(u8g2_font_7x13_tr);
+    snprintf(buf, sizeof(buf), "Cup Weight: %3.1fg", setCupWeight);
+    LeftPrintToScreen(buf, 16);
+
     // Display offset
-    IPAddress ip = WiFi.localIP();
-    snprintf(buf, sizeof(buf), "IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+    snprintf(buf, sizeof(buf), "Offset: %3.2fg", offset);
     LeftPrintToScreen(buf, 32);
 
     // Display shot count
@@ -325,14 +318,10 @@ void showDebugModeStatus(bool debugMode)
     displayLock = true; // Lock the display while showing the message
     screen.clearBuffer();
     screen.setFont(u8g2_font_7x14B_tf);
-    CenterPrintToScreen(debugMode ? "Debug Mode On" : "Debug Mode Off", 32);
+    CenterPrintToScreen(debugMode ? "Debug Mode Enabled" : "Debug Mode Disabled", 32);
     screen.sendBuffer();
     delay(2000); // Show the message for 2 seconds
     displayLock = false; // Unlock the display
-
-    showIPAddress(); // Always display IP at the bottom
-        screen.sendBuffer();
-        delay(1000);
 }
 
 
@@ -369,7 +358,7 @@ void showSetting()
   }
   else if (currentSetting == 8)
   {
-    showGrindTriggerMenu();
+    showSleepTimerMenu();
   }
   else if (currentSetting == 9) {
     showDebugMenu();
@@ -448,7 +437,7 @@ void updateDisplay(void *parameter)
 
     screen.clearBuffer(); // Clear the display buffer
     screen.clearBuffer(); // Clear the display buffer
-    if (millis() - lastSignificantWeightChangeAt > sleepTime)
+    if (millis() - lastSignificantWeightChangeAt > SLEEP_AFTER_MS)
     {
       screen.sendBuffer(); // Send the buffer to the display to "sleep"
       delay(100);
@@ -459,7 +448,7 @@ void updateDisplay(void *parameter)
     if (scaleLastUpdatedAt == 0)
     {
       screen.setFontPosTop();
-      screen.drawStr(0, 20, "Initializing...");
+      screen.drawStr(0, 20, "Initializing...v5");
     }
     else if (!scaleReady)
     {
@@ -510,7 +499,7 @@ void updateDisplay(void *parameter)
         screen.setFont(u8g2_font_7x13_tf);
         screen.setFontPosCenter();
         screen.setCursor(5, 50);
-        snprintf(buf2, sizeof(buf2), "Set: %3.1fg", abs(setWeight));
+        snprintf(buf2, sizeof(buf2), "Set: %3.1fg", setWeight);
         LeftPrintToScreen(buf2, 50);
       }
       else if (scaleStatus == STATUS_GRINDING_FAILED)
@@ -521,8 +510,8 @@ void updateDisplay(void *parameter)
 
         screen.setFontPosTop();
         screen.setFont(u8g2_font_7x13_tr);
-        CenterPrintToScreen("Rotate dial", 32);
-        CenterPrintToScreen("to exit", 42);
+        CenterPrintToScreen("Press the balance", 32);
+        CenterPrintToScreen("to reset", 42);
       }
       else if (scaleStatus == STATUS_GRINDING_FINISHED)
       {
@@ -564,8 +553,7 @@ void updateDisplay(void *parameter)
       else if (scaleStatus == STATUS_INFO_MENU)
       {
         showInfoMenu(); // Continuously display the Info Menu while in this state
-        delay(1000);     // Add a small delay to avoid rapid screen updates
-        exitToMenu();
+        delay(100);     // Add a small delay to avoid rapid screen updates
         continue;       // Skip the rest of the update logic
       }
     }

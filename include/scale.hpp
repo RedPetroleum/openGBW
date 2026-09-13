@@ -2,4 +2,3 @@
 
 //Methods
 void setupScale();
-void tareScale();

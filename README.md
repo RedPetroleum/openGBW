@@ -6,10 +6,6 @@
  - Info menu to see offset and cup weight
  - Wake on rotary turn
  - Sleep adjustable via menus instead of code compile
- - Now uses XIAO-ESP32-C3
- - Added the ability to use a button as a grinder trigger
-
------------
 
 # OpenGBW
 
@@ -20,14 +16,25 @@ More info: https://besson.co/projects/coffee-grinder-smart-scale
 
 This mod will add GBW functionality to basically any coffe grinder that can be started and stopped manually.
 
-The included 3D Models are adapted to the Eureka Mignon XL and the Macap Leo E but the electronics can be used for any Scale.
+The included 3D Models are adapted to the Eureka Mignon XL, but the electronics can be used for any Scale.
+
+-----------
+
+### Differences to the original
+
+- added a rotary encoder to select weight and navigate menus
+- made everything user configurable without having to compile your custom firmware
+- dynamically adjust the weight offset after each grind
+- added relay for greater compatibility
+- added different ways to activate the grinder
+- added scale only mode
 
 -----------
 
 ### Getting started
 
 1) 3D print the included models for a Eureka Mignon XL or design your own
-2) flash the firmware onto an XIAO-ESP32-C3
+2) flash the firmware onto an ESP32
 3) connect the display, relay, load cell and rotary encoder to the ESP32 according to the wiring instructions
 4) go into the menu by pressing the button of the rotary encoder and set your initial offset. -2g is a good enough starting value for a Mignon XL
 5) if you're using the Mignon's push button to activate the grinder set grinding mode to impulse. If you're connected directly to the motor relay use continuous.
@@ -50,8 +57,8 @@ The included 3D Models are adapted to the Eureka Mignon XL and the Macap Leo E b
 | white  | A-  | |
 |   | VCC  | VCC/3.3 |
 |   | GND  | GND |
-|   | SCK  | GPIO 2 |
-|   | DT  | GPIO 2 |
+|   | SCK  | GPIO 18 |
+|   | DT  | GPIO 19|
 
 #### Display
 
@@ -59,8 +66,8 @@ The included 3D Models are adapted to the Eureka Mignon XL and the Macap Leo E b
 |---|---|
 | VCC | VCC/3.3 |
 | GND | GND |
-| SCL | GPIO 7 |
-| SDA | GPIO 6 |
+| SCL | GPIO 22 |
+| SDA | GPIO 21 |
 
 #### Relay
 
@@ -68,7 +75,7 @@ The included 3D Models are adapted to the Eureka Mignon XL and the Macap Leo E b
 |---|---|---|
 | + | VCC/3.3 | |
 | - | GND | |
-| S | GPIO 4 | |
+| S | GPIO 33 | |
 | Middle Screw Terminal | | push button |
 | NO Screw Terminal | | push button |
 
@@ -78,28 +85,22 @@ The included 3D Models are adapted to the Eureka Mignon XL and the Macap Leo E b
 |---|---|
 | VCC/+ | VCC/3.3 |
 | GND | GND |
-| SW | GPIO 10 |
-| DT | GPIO 9 |
-| CLK | GPIO 8 |
-
-### MX Cherry Switch
-
-One side to pin 8 
-one side to GND
+| SW | GPIO 34 |
+| DT | GPIO 23 |
+| CLK | GPIO 32 |
 
 -----------
 
 ### BOM
 
-1x XIAO-ESP32-C3  
+1x ESP32  
 1x HX711 load cell amplifier  
 1x 0.9" OLED Display  
 1x KY-040 rotary encoder  
 1x 500g load cell 60 x 15,8 x 6,7 https://www.amazon.de/gp/product/B019JO9BWK/ref=ppx_yo_dt_b_asin_title_o02_s00?ie=UTF8&psc=1  
-1x 5 volt single channel relay (if you can't hook dirently to the existing relay)
 
-Various jumper cables I would recommend shielded cables
-A few WAGO or similar connectors
+various jumper cables  
+a few WAGO or similar connectors
 
 -----------
 
@@ -113,20 +114,10 @@ These _should_ fit any grinder in the Mignon line up as far as I can tell.
 
 There's also STLs for a universal scale in the repo, though it is mostly meant as a starting off point to create your own. You can use the provided files, but you'll need to print an external enclosure for the ESP32, relay and any other components your setup might need.
 
------------
+### Todo:
 
-### PCB
-
-This PCB was designed using the many resources in EAF and an absolute crap ton of youtube. KiCad is truly amazing. 
-
-If you want to just **get the pcb** made:
-The **openGBW_pcbv1.3FF.zip** is the zipped file you'll want to send to PCBWay/JLCPCB 
-
-If you want to **modify and remix** the pcb:
-The **openGBW_v1.3_proj.zip** is the file you'll want to download
-
-This was done in KiCad as well. 
-
-The PCB requires that you solder the XIAO to the board. It also makes use of JST-XH connectors on the outward connections. 
-
------------
+- ~add option to change grind start/stop behaviour. Right now it pulses for 50ms, this works if its hooked up to the push button of a Eureka grinder. Other models might need constant input while grinding~ done
+- add mounting options and cable routing channels to base
+- more detailed instructions (with pictures!)
+- other grinders?
+- ???
