@@ -42,6 +42,26 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
   screen.print(str);                           // Print the text
 }
 
+// Decimal point column for the weights on the main screen ("0.0 g" appears centered)
+#define WEIGHT_DECIMAL_X 56
+// Narrow gap in pixels between a weight and its unit
+#define WEIGHT_UNIT_GAP 2
+
+// Function to print a weight with its decimal point at WEIGHT_DECIMAL_X and a narrow gap before "g"
+// Requires a font where all digits have the same advance width
+void WeightPrintToScreen(double weight, u8g2_uint_t y)
+{
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%.1f", weight);
+  const char *decimalPoint = strchr(buf, '.');
+  int integerDigits = decimalPoint ? decimalPoint - buf : strlen(buf);
+  int digitAdvance = u8g2_GetGlyphWidth(screen.getU8g2(), '0'); // advance incl. spacing, not bounding box
+  screen.setCursor(WEIGHT_DECIMAL_X - integerDigits * digitAdvance, y);
+  screen.print(buf);
+  screen.setCursor(screen.getCursorX() + WEIGHT_UNIT_GAP, y);
+  screen.print("g");
+}
+
 //MENU 
 
 // Menu items for user interface
@@ -518,21 +538,13 @@ void updateDisplay(void *parameter)
 
         screen.setFont(u8g2_font_7x14B_tf);
         screen.setFontPosCenter();
-        screen.setCursor(0, 28);
-        snprintf(buf, sizeof(buf), "%3.1fg", abs(scaleWeight));
-        CenterPrintToScreen(buf, 32);
+        WeightPrintToScreen(abs(scaleWeight), 32);
 
+        // Set weight is aligned on the decimal point below the measured weight, "Set:" sits left of it
         screen.setFont(u8g2_font_7x13_tf);
         screen.setFontPosCenter();
-        snprintf(buf2, sizeof(buf2), "%3.1fg", setWeight);
-        {
-          // Center the set weight number like the measured weight, "Set: " sits left of it
-          u8g2_uint_t numberX = 128 / 2 - screen.getStrWidth(buf2) / 2;
-          u8g2_uint_t labelWidth = screen.getStrWidth("Set: 0") - screen.getStrWidth("0");
-          screen.setCursor(numberX - labelWidth, 50);
-          screen.print("Set: ");
-          screen.print(buf2);
-        }
+        LeftPrintToScreen("Set:", 50);
+        WeightPrintToScreen(setWeight, 50);
       }
       else if (scaleStatus == STATUS_GRINDING_FAILED)
       {
