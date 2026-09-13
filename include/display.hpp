@@ -13,6 +13,7 @@ void LeftPrintActiveToScreen(char const *str, u8g2_uint_t y);
 void showCupWeightSetScreen(double cupWeight);
 void showInfoMenu();
 void wakeScreen();
+bool displayAsleep();
 void showDebugModeStatus(bool debugMode);
 void showDebugMenu();
 void handleDebugMenuAction();

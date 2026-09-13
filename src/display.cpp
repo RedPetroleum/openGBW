@@ -6,8 +6,7 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C screen(U8G2_R0);
 TaskHandle_t DisplayTask;
 
 // Time in milliseconds after which the display sleeps (10 seconds)
-int sleepTime = SLEEP_AFTER_MS;
-bool screenJustWoke = false;
+int sleepTime = SLEEP_AFTER_MS; // loaded from the preferences in setupScale
 
 // Function to center-align and print text to the screen
 void CenterPrintToScreen(char const *str, u8g2_uint_t y)
@@ -82,7 +81,7 @@ MenuItem menuItems[12] = {
     {7, false, "Info Menu", 0},
     {8, false, "Sleep Timer", 0},
     {9, false, "Reset", 0},
-    {10, false, "Comet Blaster", 0},
+    {10, false, "Games", 0},
     // Debug menu placeholder (conditional)
     {11, false, "Debug Menu", 0} // Visible only if debugMode is true
 };
@@ -135,10 +134,14 @@ void setupMenuItems() {
     }
 }
 
+// The display sleeps when neither the scale nor the knob was used for sleepTime
+bool displayAsleep() {
+    return millis() - lastActivityAt > (unsigned long)sleepTime;
+}
+
 void wakeScreen() {
     // Reset the sleep timer and update the display
-    lastSignificantWeightChangeAt = millis();
-    screenJustWoke = true; // Indicate that the screen just woke up
+    lastActivityAt = millis();
     scaleStatus = STATUS_EMPTY;
     screen.clearBuffer();
     screen.sendBuffer();
@@ -489,6 +492,10 @@ void showSetting()
   {
     showGrindHistory();
   }
+  else if (currentSetting == GAMES_MENU_SETTING)
+  {
+    showGamesMenu();
+  }
 
 }
 
@@ -565,7 +572,7 @@ void updateDisplay(void *parameter)
 
     screen.clearBuffer(); // Clear the display buffer
     screen.clearBuffer(); // Clear the display buffer
-    if (millis() - lastSignificantWeightChangeAt > SLEEP_AFTER_MS)
+    if (displayAsleep())
     {
       screen.sendBuffer(); // Send the buffer to the display to "sleep"
       delay(100);

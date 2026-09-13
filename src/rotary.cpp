@@ -138,8 +138,10 @@ void rotary_onButtonClick()
             currentSetting = 6;
             Serial.println("Reset Menu");
             break;
-        case 10: // Game
-            gameEnter();
+        case 10: // Games Menu
+            currentSetting = GAMES_MENU_SETTING;
+            scaleStatus = STATUS_IN_SUBMENU;
+            Serial.println("Games Menu");
             break;
         case 11: // Debug Menu
             if (debugMode)
@@ -299,6 +301,11 @@ void rotary_onButtonClick()
             currentSetting = -1;
             break;
         }
+        case GAMES_MENU_SETTING: // Games Menu
+        {
+            gamesMenuOnClick(); // Starts the selected game or returns to the main menu
+            break;
+        }
         case 12: // Weight Chart view
         case 13: // Weight History view
         {
@@ -314,22 +321,19 @@ void rotary_loop()
 {
     if (rotaryEncoder.encoderChanged())
     {
-        // Wake the screen if it's asleep
-        if (millis() - lastSignificantWeightChangeAt > sleepTime)
+        if (displayAsleep())
         {
+            // Turning only wakes the display, the turn itself changes nothing
             Serial.println("Screen waking due to rotary movement...");
+            encoderValue = rotaryEncoder.readEncoder();
             wakeScreen();
+            return;
         }
+        lastActivityAt = millis(); // Turning keeps the display awake
         switch (scaleStatus)
         {
         case STATUS_EMPTY:
         {
-            if (screenJustWoke)
-            {
-                // Skip modifying the set weight if the screen just woke up
-                screenJustWoke = false; // Reset the flag
-                break;
-            }
             // Adjust weight when in scale mode
             int newValue = rotaryEncoder.readEncoder();
             setWeight += ((float)newValue - (float)encoderValue) / 10 * encoderDir;
@@ -364,6 +368,11 @@ void rotary_loop()
             { // Cup weight menus: turning leaves without saving
                 encoderValue = newValue;
                 exitToMenu();
+            }
+            else if (currentSetting == GAMES_MENU_SETTING)
+            { // Games Menu
+                gamesMenuOnTurn((newValue - encoderValue) * -encoderDir);
+                encoderValue = newValue;
             }
             else if (currentSetting == 13)
             { // Weight History: scroll through the recorded grinds
@@ -427,6 +436,14 @@ void rotary_loop()
     }
     if (rotaryEncoder.isEncoderButtonClicked())
     {
+        if (displayAsleep())
+        {
+            // A click only wakes the display
+            Serial.println("Screen waking due to button click...");
+            wakeScreen();
+            return;
+        }
+        lastActivityAt = millis(); // Clicking keeps the display awake
         if (scaleStatus == STATUS_GAME)
         {
             gameOnClick(); // Handled by the game, bypasses the rapid click debug toggle

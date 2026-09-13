@@ -2,10 +2,13 @@
 
 #include "config.hpp"
 
-// Comet Blaster: score points for surviving and destroying comets flying in from the right.
-// The knob moves the ship, pressing the scale fires the laser.
+// Games submenu and the games started from it. The knob and the scale are the controllers.
 
-void gameEnter();            // Starts a new game (called from the menu)
-void gameOnTurn(int steps);  // Knob input from the rotary task
-void gameOnClick();          // Button input from the rotary task
-void gameLoop();             // Updates and draws one frame (called from the display task)
+#define GAMES_MENU_SETTING 14 // currentSetting while the Games submenu is shown
+
+void showGamesMenu();            // Draws the Games submenu
+void gamesMenuOnTurn(int steps); // Moves the selection in the Games submenu
+void gamesMenuOnClick();         // Starts the selected game or returns to the main menu
+void gameOnTurn(int steps);      // Knob input from the rotary task while playing
+void gameOnClick();              // Button input from the rotary task while playing
+void gameLoop();                 // Updates and draws one frame of the running game (called from the display task)

@@ -41,7 +41,7 @@ struct GrindRecord
 extern bool debugMode;
 
 //Set your sleep variable
-#define SLEEP_AFTER_MS 60000
+#define SLEEP_AFTER_MS 60000 // default time without activity until the display turns off, adjustable in the menu
 
 //Main Variables and Pins
 #define STATUS_EMPTY 0
@@ -64,6 +64,8 @@ extern bool debugMode;
 
 #define TARE_MEASURES 20 // use the average of measure for taring
 #define SIGNIFICANT_WEIGHT_CHANGE 10 // 5 grams changes are used to detect a significant change
+#define WAKE_WEIGHT_CHANGE 1.0 // a change of this many grams between two readings (e.g. tapping the scale) counts as activity
+#define WAKE_IGNORE_AFTER_TARE_MS 3000 // readings settle this long after taring, their changes do not count as activity
 #define MAX_PLAUSIBLE_WEIGHT_JUMP 3 // larger jumps between two readings are treated as spikes when stopping the grinder
 #define COFFEE_DOSE_WEIGHT 17.5 //war 18
 #define COFFEE_DOSE_OFFSET -1.67 //war -2.5
@@ -85,7 +87,7 @@ extern bool debugMode;
 extern volatile bool displayLock; // Add this declaration
 extern double scaleWeight;
 extern unsigned long scaleLastUpdatedAt;
-extern unsigned long lastSignificantWeightChangeAt;
+extern unsigned long lastActivityAt; // last scale change or knob use, the display sleeps sleepTime after it
 extern unsigned long lastTareAt;
 extern bool scaleReady;
 extern int scaleStatus;
@@ -106,7 +108,6 @@ extern MenuItem menuItems[];
 extern int currentMenuItem;
 extern int currentSetting;
 extern int sleepTime;
-extern bool screenJustWoke;
 extern unsigned int shotCount;
 extern int debugMenuItemsCount;
 extern int currentDebugMenuItem;

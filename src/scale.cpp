@@ -24,7 +24,7 @@ int grindHistoryCount = 0;
 
 // Timing and status variables
 unsigned long scaleLastUpdatedAt = 0;  // Timestamp of the last scale update
-unsigned long lastSignificantWeightChangeAt = 0; // Timestamp of the last significant weight change
+unsigned long lastActivityAt = 0; // Timestamp of the last scale change or knob use (display sleep timer)
 unsigned long lastTareAt = 0; // Timestamp of the last tare operation
 bool scaleReady = false;      // Indicates if the scale is ready to measure
 int scaleStatus = STATUS_EMPTY; // Current status of the scale
@@ -114,8 +114,10 @@ bool isCupDetected(double cupWeight) {
 void scaleStatusLoop(void *p) {
     for (;;) {
         double tenSecAvg = weightHistory.averageSince((int64_t)millis() - 10000);
-        if (ABS(tenSecAvg - scaleWeight) > SIGNIFICANT_WEIGHT_CHANGE) {
-            lastSignificantWeightChangeAt = millis();
+        // Placing, removing or tapping something on the scale keeps the display awake or wakes it
+        if (ABS(tenSecAvg - scaleWeight) > SIGNIFICANT_WEIGHT_CHANGE ||
+            (ABS(scaleWeight - previousScaleWeight) > WAKE_WEIGHT_CHANGE && millis() - lastTareAt > WAKE_IGNORE_AFTER_TARE_MS)) {
+            lastActivityAt = millis();
         }
 
         switch (scaleStatus) {
@@ -138,7 +140,7 @@ void scaleStatusLoop(void *p) {
             }
             case STATUS_GRINDING_IN_PROGRESS: {
                 // Keep the display awake, otherwise the sleep timer resets the status mid-grind
-                lastSignificantWeightChangeAt = millis();
+                lastActivityAt = millis();
                 if (!scaleReady) {
                     abortGrinding("Scale error");
                     continue;
@@ -208,7 +210,7 @@ void scaleStatusLoop(void *p) {
             case STATUS_GRINDING_FAILED: {
                 // Keep the display awake, otherwise the sleep timer would leave the failed state
                 // and a cup still on the scale would restart the grinder unattended
-                lastSignificantWeightChangeAt = millis();
+                lastActivityAt = millis();
                 break;
             }
         }
@@ -237,6 +239,7 @@ void setupScale() {
     scaleMode = preferences.getBool("scaleMode", false);
     grindMode = preferences.getBool("grindMode", true);
     shotCount = preferences.getUInt("shotCount", SHOT_COUNT_DEFAULT);
+    sleepTime = constrain(preferences.getInt("sleepTime", SLEEP_AFTER_MS), 5000, 600000);
     if (preferences.getBytesLength("grindHist") == sizeof(grindHistory)) {
         preferences.getBytes("grindHist", grindHistory, sizeof(grindHistory));
         grindHistoryCount = constrain(preferences.getInt("grindHistN", 0), 0, GRIND_HISTORY_SIZE);
