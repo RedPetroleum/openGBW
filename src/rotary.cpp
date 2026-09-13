@@ -66,7 +66,13 @@ void rotary_onButtonClick()
         return;         // Exit early to prevent other actions
     }
 
-    if (scaleStatus == STATUS_EMPTY)
+    if (scaleStatus == STATUS_GRINDING_FAILED)
+    {
+        // Leave the failed state, a cup still on the scale starts a new grind
+        scaleStatus = STATUS_EMPTY;
+        Serial.println("Grinding failure reset");
+    }
+    else if (scaleStatus == STATUS_EMPTY)
     {
         // Enter the menu when the scale is empty
         scaleStatus = STATUS_IN_MENU;

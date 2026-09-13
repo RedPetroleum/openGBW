@@ -33,6 +33,7 @@ unsigned long startedGrindingAt = 0;  // Timestamp of when grinding started
 unsigned long finishedGrindingAt = 0; // Timestamp of when grinding finished
 bool greset = false;          // Flag for reset operation
 bool newOffset = false;       // Indicates if a new offset value is pending
+const char *grindFailReason = ""; // Why the last grind was aborted, shown on the display
 
 // Tares the scale (sets the current weight to zero)
 void tareScale() {
@@ -90,6 +91,15 @@ void addGrindRecord(uint32_t shot, float duration, float usedOffset) {
     }
 }
 
+// Stops the grinder and switches to the failed state, which is left by pressing the knob
+void abortGrinding(const char *reason) {
+    grinderToggle();
+    grindFailReason = reason;
+    scaleStatus = STATUS_GRINDING_FAILED;
+    Serial.print("Grinding failed: ");
+    Serial.println(reason);
+}
+
 // Checks if the given cup has been resting on the scale for the last second
 bool isCupDetected(double cupWeight) {
     return ABS(weightHistory.minSince((int64_t)millis() - 1000) - cupWeight) < CUP_DETECTION_TOLERANCE &&
@@ -125,28 +135,25 @@ void scaleStatusLoop(void *p) {
                 // Keep the display awake, otherwise the sleep timer resets the status mid-grind
                 lastSignificantWeightChangeAt = millis();
                 if (!scaleReady) {
-                    grinderToggle();
-                    scaleStatus = STATUS_GRINDING_FAILED;
+                    abortGrinding("Scale error");
+                    continue;
                 }
                 if (scaleMode && startedGrindingAt == 0 && scaleWeight - cupWeightEmpty >= 0.1) {
                     startedGrindingAt = millis();
                     continue;
                 }
                 if (millis() - startedGrindingAt > MAX_GRINDING_TIME && !scaleMode) {
-                    grinderToggle();
-                    scaleStatus = STATUS_GRINDING_FAILED;
+                    abortGrinding("Timeout");
                     continue;
                 }
-                if (millis() - startedGrindingAt > 2000 &&
+                if (millis() - startedGrindingAt > NO_PROGRESS_START_DELAY &&
                     scaleWeight - weightHistory.firstValueOlderThan(millis() - 2000) < 1 &&
                     !scaleMode) {
-                    grinderToggle();
-                    scaleStatus = STATUS_GRINDING_FAILED;
+                    abortGrinding("No progress");
                     continue;
                 }
                 if (weightHistory.minSince((int64_t)millis() - 200) < cupWeightEmpty - CUP_DETECTION_TOLERANCE && !scaleMode) {
-                    grinderToggle();
-                    scaleStatus = STATUS_GRINDING_FAILED;
+                    abortGrinding("Cup removed");
                     continue;
                 }
                 double currentOffset = offset;
@@ -190,10 +197,9 @@ void scaleStatusLoop(void *p) {
                 break;
             }
             case STATUS_GRINDING_FAILED: {
-                if (scaleWeight >= GRINDING_FAILED_WEIGHT_TO_RESET) {
-                    scaleStatus = STATUS_EMPTY;
-                    continue;
-                }
+                // Keep the display awake, otherwise the sleep timer would leave the failed state
+                // and a cup still on the scale would restart the grinder unattended
+                lastSignificantWeightChangeAt = millis();
                 break;
             }
         }

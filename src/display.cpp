@@ -574,7 +574,7 @@ void updateDisplay(void *parameter)
     if (scaleLastUpdatedAt == 0)
     {
       screen.setFontPosTop();
-      screen.drawStr(0, 20, "Initializing...v5");
+      screen.drawStr(0, 20, "Initializing...");
     }
     else if (!scaleReady)
     {
@@ -634,8 +634,9 @@ void updateDisplay(void *parameter)
 
         screen.setFontPosTop();
         screen.setFont(u8g2_font_7x13_tr);
-        CenterPrintToScreen("Press the balance", 32);
-        CenterPrintToScreen("to reset", 42);
+        CenterPrintToScreen(grindFailReason, 18);
+        CenterPrintToScreen("Press knob", 36);
+        CenterPrintToScreen("to reset", 50);
       }
       else if (scaleStatus == STATUS_GRINDING_FINISHED)
       {

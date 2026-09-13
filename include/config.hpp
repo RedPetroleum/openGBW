@@ -68,7 +68,7 @@ extern bool debugMode;
 #define COFFEE_DOSE_OFFSET -1.67 //war -2.5
 #define MAX_GRINDING_TIME 60000 // 60 seconds (war 40, davor 20)
 #define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
-#define GRINDING_FAILED_WEIGHT_TO_RESET 150 // force on balance need to be measured to reset grinding
+#define NO_PROGRESS_START_DELAY 10000 // "no progress" abort is only checked this long (ms) after grinding started
 
 #define GRINDER_ACTIVE_PIN 25 // war 33
 
@@ -98,6 +98,7 @@ extern bool grindMode;
 extern bool greset;
 extern int menuItemsCount;
 extern double setCupWeight;
+extern const char *grindFailReason;
 extern double setCupWeight2;
 extern double scaleFactor;
 extern MenuItem menuItems[];
