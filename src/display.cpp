@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "rotary.hpp"
+#include "game.hpp"
 
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C screen(U8G2_R0);
 TaskHandle_t DisplayTask;
@@ -67,10 +68,10 @@ void WeightPrintToScreen(double weight, u8g2_uint_t y)
 // Menu items for user interface
 int currentMenuItem = 0;      // Index of the current menu item
 int currentSetting;           // Index of the current setting being adjusted
-int menuItemsCount = debugMode ? 11 : 10;      // Total number of menu items
+int menuItemsCount = debugMode ? 12 : 11;      // Total number of menu items
 
  // Menu items for settings and calibration
-MenuItem menuItems[11] = {
+MenuItem menuItems[12] = {
     {0, false, "Exit", 0},
     {1, false, "Cup Weight 1", 1, &setCupWeight},
     {2, false, "Cup Weight 2", 1, &setCupWeight2},
@@ -81,8 +82,9 @@ MenuItem menuItems[11] = {
     {7, false, "Info Menu", 0},
     {8, false, "Sleep Timer", 0},
     {9, false, "Reset", 0},
+    {10, false, "Comet Blaster", 0},
     // Debug menu placeholder (conditional)
-    {10, false, "Debug Menu", 0} // Visible only if debugMode is true
+    {11, false, "Debug Menu", 0} // Visible only if debugMode is true
 };
 
 int debugMenuItemsCount = 5; // Number of items in the Debug Menu
@@ -127,9 +129,9 @@ void showDebugMenu()
 
 void setupMenuItems() {
     if (debugMode) {
-        menuItemsCount = 11; // Include Debug Menu
+        menuItemsCount = 12; // Include Debug Menu
     } else {
-        menuItemsCount = 10; // Exclude Debug Menu
+        menuItemsCount = 11; // Exclude Debug Menu
     }
 }
 
@@ -680,6 +682,10 @@ void updateDisplay(void *parameter)
         showInfoMenu(); // Continuously display the Info Menu while in this state
         delay(100);     // Add a small delay to avoid rapid screen updates
         continue;       // Skip the rest of the update logic
+      }
+      else if (scaleStatus == STATUS_GAME)
+      {
+        gameLoop(); // Updates and draws one frame, paces itself
       }
     }
     screen.sendBuffer(); // Send the buffer to the display

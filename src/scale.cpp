@@ -53,9 +53,13 @@ void updateScale(void *parameter) {
             tareScale();
         }
         if (loadcell.wait_ready_timeout(300)) {
-            lastEstimate = kalmanFilter.updateEstimate(loadcell.get_units(5));
+            // The game needs the laser to react quickly when the scale is pressed:
+            // single readings without the (lagging) Kalman estimate while playing
+            bool fastReadings = scaleStatus == STATUS_GAME;
+            float reading = loadcell.get_units(fastReadings ? 1 : 5);
+            lastEstimate = kalmanFilter.updateEstimate(reading);
             previousScaleWeight = scaleWeight;
-            scaleWeight = lastEstimate;
+            scaleWeight = fastReadings ? reading : lastEstimate;
             scaleLastUpdatedAt = millis();
             weightHistory.push(scaleWeight);
             scaleReady = true;

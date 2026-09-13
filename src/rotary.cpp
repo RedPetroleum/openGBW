@@ -1,6 +1,7 @@
 #include "config.hpp"
 #include "rotary.hpp"
 #include "display.hpp"
+#include "game.hpp"
 
 // Rotary encoder for user input
 AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(
@@ -61,7 +62,7 @@ void rotary_onButtonClick()
 
         // Use the display method from display.cpp
         showDebugModeStatus(debugMode);
-        menuItemsCount = debugMode ? 11 : 10;
+        menuItemsCount = debugMode ? 12 : 11;
         clickCount = 0; // Reset the click count
         return;         // Exit early to prevent other actions
     }
@@ -137,7 +138,10 @@ void rotary_onButtonClick()
             currentSetting = 6;
             Serial.println("Reset Menu");
             break;
-        case 10: // Debug Menu
+        case 10: // Game
+            gameEnter();
+            break;
+        case 11: // Debug Menu
             if (debugMode)
             {
                 scaleStatus = STATUS_IN_SUBMENU;
@@ -335,6 +339,14 @@ void rotary_loop()
             preferences.end();
             break;
         }
+        case STATUS_GAME:
+        {
+            // Move the ship, positive steps move it down like in the menus
+            int newValue = rotaryEncoder.readEncoder();
+            gameOnTurn((newValue - encoderValue) * -encoderDir);
+            encoderValue = newValue;
+            break;
+        }
         case STATUS_IN_MENU:
         {
             // Navigate through menu items
@@ -415,7 +427,11 @@ void rotary_loop()
     }
     if (rotaryEncoder.isEncoderButtonClicked())
     {
-        if (scaleStatus == STATUS_IN_SUBMENU && currentSetting == 9) // Debug Menu
+        if (scaleStatus == STATUS_GAME)
+        {
+            gameOnClick(); // Handled by the game, bypasses the rapid click debug toggle
+        }
+        else if (scaleStatus == STATUS_IN_SUBMENU && currentSetting == 9) // Debug Menu
         {
             handleDebugMenuAction(); // Perform the selected debug menu action
         }

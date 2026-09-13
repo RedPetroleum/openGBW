@@ -51,6 +51,7 @@ extern bool debugMode;
 #define STATUS_IN_MENU 4
 #define STATUS_IN_SUBMENU 5
 #define STATUS_INFO_MENU 8
+#define STATUS_GAME 9
 
 #define CUP_WEIGHT 396.1 //war 292
 #define CUP_WEIGHT_2 76.3 // second cup
