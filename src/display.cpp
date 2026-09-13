@@ -67,31 +67,31 @@ void WeightPrintToScreen(double weight, u8g2_uint_t y)
 // Menu items for user interface
 int currentMenuItem = 0;      // Index of the current menu item
 int currentSetting;           // Index of the current setting being adjusted
-int menuItemsCount = debugMode ? 12 : 11;      // Total number of menu items
+int menuItemsCount = debugMode ? 11 : 10;      // Total number of menu items
 
  // Menu items for settings and calibration
-MenuItem menuItems[12] = {
-    {0, false, "Cup Weight 1", 1, &setCupWeight},
-    {1, false, "Cup Weight 2", 1, &setCupWeight2},
-    {2, false, "Calibrate", 0},
+MenuItem menuItems[11] = {
+    {0, false, "Exit", 0},
+    {1, false, "Cup Weight 1", 1, &setCupWeight},
+    {2, false, "Cup Weight 2", 1, &setCupWeight2},
     {3, false, "Scale Factor", 1, &scaleFactor},
     {4, false, "Offset", 0.1, &offset},
     {5, false, "Scale Mode", 0},
     {6, false, "Grinding Mode", 0},
     {7, false, "Info Menu", 0},
     {8, false, "Sleep Timer", 0},
-    {9, false, "Exit", 0},
-    {10, false, "Reset", 0},
+    {9, false, "Reset", 0},
     // Debug menu placeholder (conditional)
-    {11, false, "Debug Menu", 0} // Visible only if debugMode is true
+    {10, false, "Debug Menu", 0} // Visible only if debugMode is true
 };
 
-int debugMenuItemsCount = 3; // Number of items in the Debug Menu
+int debugMenuItemsCount = 4; // Number of items in the Debug Menu
 int currentDebugMenuItem = 0; // Current selection in the Debug Menu
-MenuItem debugMenuItems[3] = {
-    {0, false, "Sim Grind", 0},
-    {1, false, "Weight Hist", 0},
-    {2, false, "Zero Shot Count", 0}
+MenuItem debugMenuItems[4] = {
+    {0, false, "Exit", 0},
+    {1, false, "Sim Grind", 0},
+    {2, false, "Weight Hist", 0},
+    {3, false, "Zero Shot Count", 0}
 };
 
 void showDebugMenu()
@@ -113,7 +113,8 @@ void showDebugMenu()
     // Print "Debug Menu" as title
     CenterPrintToScreen("Debug Menu", 0);
 
-    // Display the previous, current, and next items
+    // Display the previous, current, and next items (regular font like the main menu)
+    screen.setFont(u8g2_font_7x13_tr);
     LeftPrintToScreen(prev.menuName, 19);
     LeftPrintActiveToScreen(current.menuName, 35);
     LeftPrintToScreen(next.menuName, 51);
@@ -124,9 +125,9 @@ void showDebugMenu()
 
 void setupMenuItems() {
     if (debugMode) {
-        menuItemsCount = 12; // Include Debug Menu
+        menuItemsCount = 11; // Include Debug Menu
     } else {
-        menuItemsCount = 11; // Exclude Debug Menu
+        menuItemsCount = 10; // Exclude Debug Menu
     }
 }
 
@@ -224,12 +225,12 @@ void showScaleModeMenu()
   screen.setFont(u8g2_font_7x13_tr);        // Set the font for the menu items
   if (scaleMode)
   {
-    LeftPrintToScreen("GBW", 19);              // Print inactive item
+    LeftPrintToScreen("GBW (default)", 19);    // Print inactive item
     LeftPrintActiveToScreen("Scale only", 35); // Highlight active item
   }
   else
   {
-    LeftPrintActiveToScreen("GBW", 19);  // Highlight active item
+    LeftPrintActiveToScreen("GBW (default)", 19); // Highlight active item
     LeftPrintToScreen("Scale only", 35); // Print inactive item
   }
   screen.sendBuffer(); // Send the buffer to the display
@@ -268,8 +269,8 @@ void showCupMenu(char const *title)
   screen.setFont(u8g2_font_7x13_tr);                 // Set the font for the instructions
   snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight); // Format the scale weight
   CenterPrintToScreen(buf, 19);                      // Print the scale weight
-  LeftPrintToScreen("Place cup on scale", 35);       // Print instructions
-  LeftPrintToScreen("and press button", 51);         // Print instructions
+  LeftPrintToScreen("Place cup, press", 35);         // Print instructions
+  LeftPrintToScreen("Turn to cancel", 51);           // Turning leaves without saving
   screen.sendBuffer();                               // Send the buffer to the display
 }
 
@@ -287,18 +288,57 @@ void showCupWeightSetScreen(double cupWeight)
   delay(2000); // Block for 2 seconds to ensure the screen stays visible
 }
 
-// Function to display the calibration menu
-void showCalibrationMenu()
+// Function to display the recorded weight history as a line graph (newest reading on the right)
+void showWeightHistory()
 {
+  double values[100];
+  int count = 0;
+  int64_t oldestTimestamp = millis();
+  // Samples are delivered from newest to oldest
+  weightHistory.executeOnSamplesSince(0, [&](double value, int64_t ms) {
+    if (count < 100)
+    {
+      values[count++] = value;
+      oldestTimestamp = ms;
+    }
+  });
+
   screen.clearBuffer();
   screen.setFontPosTop();
-  screen.setFont(u8g2_font_7x14B_tf);           // Set the font for the menu title
-  CenterPrintToScreen("Calibration", 0);        // Print the menu title
-  screen.setFont(u8g2_font_7x13_tr);            // Set the font for the instructions
-  CenterPrintToScreen("Place 100g weight", 19); // Print instructions
-  CenterPrintToScreen("on scale and", 35);      // Print instructions
-  CenterPrintToScreen("press button", 51);      // Print instructions
-  screen.sendBuffer();                          // Send the buffer to the display
+  screen.setFont(u8g2_font_5x7_tf);
+  if (count < 2)
+  {
+    CenterPrintToScreen("No data yet", 28);
+    screen.sendBuffer();
+    return;
+  }
+
+  double minValue = values[0];
+  double maxValue = values[0];
+  for (int i = 1; i < count; i++)
+  {
+    minValue = min(minValue, values[i]);
+    maxValue = max(maxValue, values[i]);
+  }
+  double range = max(maxValue - minValue, 1.0); // At least 1g so noise is not blown up
+
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%.1f - %.1fg", minValue, maxValue);
+  LeftPrintToScreen(buf, 0);
+  snprintf(buf, sizeof(buf), "%lus", (unsigned long)((millis() - oldestTimestamp) / 1000));
+  RightPrintToScreen(buf, 0); // Time span covered by the graph
+
+  const int graphTop = 9;
+  const int graphBottom = 63;
+  for (int i = 0; i < count - 1; i++)
+  {
+    int x1 = 127 - i * 127 / (count - 1);
+    int x2 = 127 - (i + 1) * 127 / (count - 1);
+    int y1 = graphBottom - (values[i] - minValue) / range * (graphBottom - graphTop);
+    int y2 = graphBottom - (values[i + 1] - minValue) / range * (graphBottom - graphTop);
+    screen.drawLine(x1, y1, x2, y2);
+  }
+  screen.sendBuffer();
 }
 
 // Function to display the reset menu
@@ -379,10 +419,6 @@ void showSetting()
   {
     showCupMenu("Cup Weight 2");
   }
-  else if (currentSetting == 1)
-  {
-    showCalibrationMenu();
-  }
   else if (currentSetting == 2)
   {
     showOffsetMenu();
@@ -414,6 +450,10 @@ void showSetting()
   {
     showScaleFactorMenu();
   }
+  else if (currentSetting == 12)
+  {
+    showWeightHistory();
+  }
 
 }
 
@@ -421,7 +461,12 @@ void handleDebugMenuAction()
 {
     switch (currentDebugMenuItem)
     {
-    case 0: // Simulate Grinding
+    case 0: // Exit Debug Menu
+      Serial.println("Exiting Debug Menu...");
+      exitToMenu(); // Return to Main Menu
+      break;
+
+    case 1: // Simulate Grinding
         Serial.println("Simulating Grinding...");
         scaleStatus = STATUS_GRINDING_IN_PROGRESS; // Temporarily change the state for grinding simulation
         startedGrindingAt = millis();
@@ -433,16 +478,12 @@ void handleDebugMenuAction()
         exitToMenu();
         break;
 
-    case 1: // Show Weight History
+    case 2: // Show Weight History
         Serial.println("Displaying Weight History...");
-        // Add logic to display weight history
-        // Keep in the Debug Menu
-        scaleStatus = STATUS_IN_SUBMENU;
-        currentSetting = 9;
-        exitToMenu();
-        break;
+        currentSetting = 12; // Graph is drawn by the display task, click returns to the Debug Menu
+        return;
 
-    case 2: // Reset Shot Count
+    case 3: // Reset Shot Count
       Serial.println("Resetting Shot Count...");
       shotCount = 0;
       preferences.begin("scale", false);
@@ -461,11 +502,6 @@ void handleDebugMenuAction()
       scaleStatus = STATUS_IN_SUBMENU;
       currentSetting = 9;
       exitToMenu();
-      break;
-
-    case 3: // Exit Debug Menu
-      Serial.println("Exiting Debug Menu...");
-      exitToMenu(); // Return to Main Menu
       break;
     }
     showDebugMenu(); // Update the Debug Menu display after action

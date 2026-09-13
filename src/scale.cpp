@@ -11,7 +11,7 @@ double setCupWeight2 = 0;     // Weight of the second cup set by the user
 double offset = 0;            // Offset for stopping grinding prior to reaching set weight
 double scaleFactor = LOADCELL_SCALE_FACTOR; // Load cell calibration factor
 bool scaleMode = false;       // Indicates if the scale is used in timer mode
-bool grindMode = false;       // Grinder mode: impulse (false) or continuous (true)
+bool grindMode = true;        // Grinder mode: impulse (false) or continuous (true, default)
 bool grinderActive = false;   // Grinder state (on/off)
 unsigned int shotCount;  
 
@@ -203,7 +203,7 @@ void setupScale() {
     setCupWeight = preferences.getDouble("cup", (double)CUP_WEIGHT);
     setCupWeight2 = preferences.getDouble("cup2", (double)CUP_WEIGHT_2);
     scaleMode = preferences.getBool("scaleMode", false);
-    grindMode = preferences.getBool("grindMode", false);
+    grindMode = preferences.getBool("grindMode", true);
     shotCount = preferences.getUInt("shotCount", SHOT_COUNT_DEFAULT);
     preferences.end();
 

@@ -61,7 +61,7 @@ void rotary_onButtonClick()
 
         // Use the display method from display.cpp
         showDebugModeStatus(debugMode);
-        menuItemsCount = debugMode ? 12 : 11;
+        menuItemsCount = debugMode ? 11 : 10;
         clickCount = 0; // Reset the click count
         return;         // Exit early to prevent other actions
     }
@@ -79,23 +79,21 @@ void rotary_onButtonClick()
         // Navigate through the menu items
         switch (currentMenuItem)
         {
-        case 0: // Cup Weight 1 Menu
+        case 0: // Exit
+            scaleStatus = STATUS_EMPTY;
+            rotaryEncoder.setAcceleration(100);
+            Serial.println("Exited Menu");
+            break;
+        case 1: // Cup Weight 1 Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 0;
             Serial.println("Cup 1 Menu");
             break;
-        case 1: // Cup Weight 2 Menu
+        case 2: // Cup Weight 2 Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 11;
             Serial.println("Cup 2 Menu");
             break;
-        case 2: // Calibration Menu
-        {
-            scaleStatus = STATUS_IN_SUBMENU;
-            currentSetting = 1;
-            Serial.println("Calibration Menu");
-            break;
-        }
         case 3: // Scale Factor Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 10;
@@ -128,21 +126,17 @@ void rotary_onButtonClick()
             currentSetting = 8;
             Serial.println("Sleep Timer Menu");
             break;
-        case 9: // Exit
-            scaleStatus = STATUS_EMPTY;
-            rotaryEncoder.setAcceleration(100);
-            Serial.println("Exited Menu");
-            break;
-        case 10: // Reset Menu
+        case 9: // Reset Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 6;
             Serial.println("Reset Menu");
             break;
-        case 11: // Debug Menu
+        case 10: // Debug Menu
             if (debugMode)
             {
                 scaleStatus = STATUS_IN_SUBMENU;
                 currentSetting = 9; // Identifier for Debug Menu
+                currentDebugMenuItem = 0; // Start on "Exit"
                 Serial.println("Entering Debug Menu");
             }
             break;
@@ -178,25 +172,6 @@ void rotary_onButtonClick()
                 Serial.println("Failsafe: Exiting cup weight menu due to zero weight");
                 exitToMenu();
             }
-            break;
-        }
-        case 1: // Calibration Menu
-        {
-            // Ensure a weight is actually on the scale, otherwise the factor would collapse to ~0
-            if (scaleWeight > 10)
-            {
-                scaleFactor = scaleFactor * (scaleWeight / 100);
-                preferences.begin("scale", false);
-                preferences.putDouble("calibration", scaleFactor);
-                preferences.end();
-                loadcell.set_scale(scaleFactor);
-            }
-            else
-            {
-                Serial.println("Failsafe: No calibration weight detected");
-            }
-            scaleStatus = STATUS_IN_MENU;
-            currentSetting = -1;
             break;
         }
         case 2: // Offset Menu
@@ -248,8 +223,8 @@ void rotary_onButtonClick()
                 preferences.putDouble("cup2", (double)CUP_WEIGHT_2);
                 scaleMode = false;
                 preferences.putBool("scaleMode", false);
-                grindMode = false;
-                preferences.putBool("grindMode", false);
+                grindMode = true;
+                preferences.putBool("grindMode", true);
                 shotCount = SHOT_COUNT_DEFAULT;
                 preferences.putUInt("shotCount", shotCount);
                 loadcell.set_scale(scaleFactor);
@@ -314,6 +289,11 @@ void rotary_onButtonClick()
             currentSetting = -1;
             break;
         }
+        case 12: // Weight History view
+        {
+            currentSetting = 9; // Back to the Debug Menu
+            break;
+        }
         }
     }
 }
@@ -361,7 +341,12 @@ void rotary_loop()
         case STATUS_IN_SUBMENU:
         {
             int newValue = rotaryEncoder.readEncoder();
-            if (currentSetting == 2)
+            if (currentSetting == 0 || currentSetting == 11)
+            { // Cup weight menus: turning leaves without saving
+                encoderValue = newValue;
+                exitToMenu();
+            }
+            else if (currentSetting == 2)
             { // Offset menu
                 offset += ((float)newValue - (float)encoderValue) * encoderDir / 100;
                 encoderValue = newValue;

@@ -97,4 +97,5 @@ extern int sleepTime;
 extern bool screenJustWoke;
 extern unsigned int shotCount;
 extern int debugMenuItemsCount;
-extern int currentDebugMenuItem; 
+extern int currentDebugMenuItem;
+extern MathBuffer<double, 100> weightHistory; 
