@@ -120,7 +120,8 @@ void scaleStatusLoop(void *p) {
                     lastTareAt = 0; // Retare if conditions are met
                 }
                 if (isCupDetected(setCupWeight) || isCupDetected(setCupWeight2)) {
-                    cupWeightEmpty = weightHistory.averageSince((int64_t)millis() - 500);
+                    // Same window as the cup detection, so it is guaranteed to contain readings
+                    cupWeightEmpty = weightHistory.averageSince((int64_t)millis() - 1000);
                     scaleStatus = STATUS_GRINDING_IN_PROGRESS;
                     if (!scaleMode) {
                         newOffset = true;
@@ -152,7 +153,10 @@ void scaleStatusLoop(void *p) {
                     abortGrinding("No progress");
                     continue;
                 }
-                if (weightHistory.minSince((int64_t)millis() - 200) < cupWeightEmpty - CUP_DETECTION_TOLERANCE && !scaleMode) {
+                // Use the last two readings: a new reading only arrives about every 500ms,
+                // so a short time window is often empty and would report a weight of 0
+                if (scaleWeight < cupWeightEmpty - CUP_DETECTION_TOLERANCE &&
+                    previousScaleWeight < cupWeightEmpty - CUP_DETECTION_TOLERANCE && !scaleMode) {
                     abortGrinding("Cup removed");
                     continue;
                 }
@@ -173,7 +177,8 @@ void scaleStatusLoop(void *p) {
                 break;
             }
             case STATUS_GRINDING_FINISHED: {
-                double currentWeight = weightHistory.averageSince((int64_t)millis() - 500);
+                // Window of 1s so it always contains readings (an empty window would average to 0)
+                double currentWeight = weightHistory.averageSince((int64_t)millis() - 1000);
                 if (scaleWeight < 5) {
                     startedGrindingAt = 0;
                     scaleStatus = STATUS_EMPTY;
