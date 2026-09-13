@@ -43,6 +43,16 @@ Changes I made on top of the version this is based on (see [Origin](#origin)):
 
 -----------
 
+### Hardware on the Mignon MCI
+
+**Power supply:** my version of the MCI has a 3.0V output, which I use to power the ESP32. It works, even though the ESP32 actually needs 3.3V. WiFi does not work at this voltage, though, which is why this version is not based on SyButter's latest state with WiFi and web server (see [Origin](#origin)).
+
+**Starting the grinder:** the grinder is started by the switch at the top, below the coffee outlet, which carries a 12V signal. The ESP32 is wired in parallel to this switch: it drives a transistor from GPIO 25 through a small resistor, and the transistor switches the 12V signal just like the switch does. No relay is needed.
+
+Opening the grinder and working on its electronics is at your own risk.
+
+-----------
+
 ### Origin
 
 This project has been passed on through several forks:
@@ -50,7 +60,7 @@ This project has been passed on through several forks:
 1. **Guillaume Besson ([geekuillaume](https://github.com/geekuillaume/coffee-grinder-smart-scale))** built the original coffee grinder smart scale. More info: https://besson.co/projects/coffee-grinder-smart-scale
 2. **[jb-xyz/openGBW](https://github.com/jb-xyz/openGBW)** adapted it as openGBW: rotary encoder to select the weight and navigate menus, all settings configurable without compiling your own firmware, dynamic adjustment of the offset after each grind, relay support, different ways to activate the grinder, scale only mode and 3D models for the Eureka Mignon XL.
 3. **[SyButter/openGBW](https://github.com/SyButter/openGBW)** commented and restructured the code and added a confirmation screen and escape for the cup weight, the Info Menu, wake on rotary turn, the sleep timer in the menu, the shot counter and the Debug Menu.
-4. **This version** is based on SyButter's state of December 26, 2024 (commit `becc51d`), not on his latest state. His later changes (WiFi and web server, Seeed Studio XIAO ESP32-C3, PCB, switch start) are not included. On top of that come the [Differences](#differences) listed above.
+4. **This version** is based on SyButter's state of December 26, 2024 (commit `becc51d`), not on his latest state. His later changes (WiFi and web server, Seeed Studio XIAO ESP32-C3, PCB, switch start) are not included, mainly because WiFi does not work with the 3.0V supply of the MCI (see [Hardware](#hardware-on-the-mignon-mci)). On top of that come the [Differences](#differences) listed above.
 
 -----------
 
@@ -58,7 +68,7 @@ This project has been passed on through several forks:
 
 1) 3D print the included models for a Eureka Mignon XL or design your own
 2) flash the firmware onto an ESP32
-3) connect the display, load cell and rotary encoder (and a relay, if your grinder needs one) to the ESP32. The pins are defined in `include/config.hpp`
+3) connect the display, load cell and rotary encoder to the ESP32 and connect the grinder (on the Mignon MCI see [Hardware](#hardware-on-the-mignon-mci), other grinders may need a relay). The pins are defined in `include/config.hpp`
 4) go into the menu by pressing the button of the rotary encoder and set your initial offset. -2g is a good enough starting value for a Mignon XL
 5) if you're using the Mignon's push button to activate the grinder set grinding mode to impulse. If you're connected directly to the motor relay use continuous.
 6) if you only want to use the scale to check your weight when single dosing, set scale mode to scale only. This will not trigger any relay switching and start a timer when the weight begins to increase. If you'd like to build your own brew scale with timer, this is also the mode to use.
