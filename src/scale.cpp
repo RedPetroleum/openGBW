@@ -4,6 +4,7 @@
 
 // Variables for scale functionality
 double scaleWeight = 0;       // Current weight measured by the scale
+double previousScaleWeight = 0; // Weight of the reading before the current one
 double setWeight = 0;         // Target weight set by the user
 double setCupWeight = 0;      // Weight of the cup set by the user
 double offset = 0;            // Offset for stopping grinding prior to reaching set weight
@@ -47,6 +48,7 @@ void updateScale(void *parameter) {
         }
         if (loadcell.wait_ready_timeout(300)) {
             lastEstimate = kalmanFilter.updateEstimate(loadcell.get_units(5));
+            previousScaleWeight = scaleWeight;
             scaleWeight = lastEstimate;
             scaleLastUpdatedAt = millis();
             weightHistory.push(scaleWeight);
@@ -99,6 +101,8 @@ void scaleStatusLoop(void *p) {
                 break;
             }
             case STATUS_GRINDING_IN_PROGRESS: {
+                // Keep the display awake, otherwise the sleep timer resets the status mid-grind
+                lastSignificantWeightChangeAt = millis();
                 if (!scaleReady) {
                     grinderToggle();
                     scaleStatus = STATUS_GRINDING_FAILED;
@@ -130,7 +134,11 @@ void scaleStatusLoop(void *p) {
                 if (scaleMode) {
                     currentOffset = 0;
                 }
-                if (weightHistory.maxSince((int64_t)millis() - 200) >= cupWeightEmpty + setWeight + currentOffset) {
+                double targetWeight = cupWeightEmpty + setWeight + currentOffset;
+                // Stop only on a plausible reading: a small step from the previous reading,
+                // or two readings in a row at the target (ignores single vibration spikes)
+                if (scaleWeight >= targetWeight &&
+                    (scaleWeight - previousScaleWeight < MAX_PLAUSIBLE_WEIGHT_JUMP || previousScaleWeight >= targetWeight)) {
                     finishedGrindingAt = millis();
                     grinderToggle();
                     scaleStatus = STATUS_GRINDING_FINISHED;
