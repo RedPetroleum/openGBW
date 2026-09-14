@@ -4,7 +4,7 @@
 
 // Doom: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom.
 // Pressing the scale walks forward, pulling it up walks backward, the knob turns, a click fires and
-// holding the knob opens the pause menu. Dead enemies drop ammo. Find the exit, locked doors need a key.
+// holding the knob opens the pause menu with a map of the explored level. Dead enemies drop ammo. Find the exit, locked doors need a key.
 //
 // Based on doom-nano by daveruiz (https://github.com/daveruiz/doom-nano, commit 2346404): raycaster, enemies,
 // sprites, font and level. The doors are based on Doom-Nano-ESP32 by ZelTroN-2k3
@@ -91,6 +91,8 @@
 #define DOOM_MAX_SPRITE_DEPTH 8.0f      // sprites farther away are not drawn
 #define DOOM_MIN_WALL_DISTANCE 0.2f     // closer walls are drawn at this distance
 #define DOOM_FAR 100.0f                 // depth of columns without a wall
+#define DOOM_MAP_TOP 3                  // the map has one pixel per cell, on the left of the screen
+#define DOOM_MAP_INFO_X 72              // kills and time right of the map
 #define DOOM_GUN_TARGET_POS 18          // pixels of the gun above the bottom of the view
 #define DOOM_GUN_RECOIL 4               // the gun jumps up this far when firing
 
@@ -167,6 +169,7 @@ enum DoomState
   DOOM_INTRO,
   DOOM_PLAYING,
   DOOM_PAUSED,
+  DOOM_MAP,
   DOOM_DYING,
   DOOM_OVER,
   DOOM_EXITING,
@@ -257,6 +260,7 @@ static int entityCount;
 static DoomDoor doors[DOOM_MAX_DOORS];
 static int doorCount;
 static uint8_t clearedCells[(DOOM_LEVEL_WIDTH * DOOM_LEVEL_HEIGHT + 7) / 8]; // killed enemies and picked up items
+static uint8_t seenCells[(DOOM_LEVEL_WIDTH * DOOM_LEVEL_HEIGHT + 7) / 8];    // cells a ray has reached, shown on the map
 static uint8_t ammoDrops[DOOM_LEVEL_WIDTH * DOOM_LEVEL_HEIGHT]; // clips lying in each cell
 static int kills;
 static int enemyTotal;
@@ -290,6 +294,11 @@ static int getBlock(int x, int y)
   // Four bits per cell, the first row of the data is the highest y
   int index = (DOOM_LEVEL_HEIGHT - 1 - y) * DOOM_LEVEL_WIDTH + x;
   return (level1[index / 2] >> (x % 2 ? 0 : 4)) & 0x0F;
+}
+
+static bool isSeen(int cell)
+{
+  return seenCells[cell / 8] & (1 << (cell % 8));
 }
 
 static bool isCleared(int cell)
@@ -330,6 +339,7 @@ static void startLevel()
   enemyTotal = 0;
   kills = 0;
   memset(clearedCells, 0, sizeof(clearedCells));
+  memset(seenCells, 0, sizeof(seenCells));
   memset(ammoDrops, 0, sizeof(ammoDrops));
   playerPos = {1.5f, 1.5f};
   for (int y = 0; y < DOOM_LEVEL_HEIGHT; y++)
@@ -913,6 +923,11 @@ static void renderMap(float viewBob)
       }
 
       int block = getBlock(mapX, mapY);
+      if (mapX >= 0 && mapX < DOOM_LEVEL_WIDTH && mapY >= 0 && mapY < DOOM_LEVEL_HEIGHT)
+      {
+        int cell = mapY * DOOM_LEVEL_WIDTH + mapX;
+        seenCells[cell / 8] |= 1 << (cell % 8);
+      }
       if (block == BLOCK_WALL || block == BLOCK_DOOR || block == BLOCK_LOCKED_DOOR)
       {
         distance = side == 0 ? (mapX - playerPos.x + (1 - stepX) / 2.0f) / rayX : (mapY - playerPos.y + (1 - stepY) / 2.0f) / rayY;
@@ -1180,6 +1195,65 @@ static void renderView(unsigned long now)
   }
 }
 
+static void formatTime(char *buf, size_t size, unsigned long seconds)
+{
+  snprintf(buf, size, "%lu:%02lu", seconds / 60, seconds % 60);
+}
+
+static void drawPauseMenu()
+{
+  static const char *const items[] = {"Continue", "Map", "Exit"};
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_7x14B_tf);
+  CenterPrintToScreen("Paused", 0);
+  screen.setFont(u8g2_font_7x13_tr);
+  for (int i = 0; i < 3; i++)
+  {
+    if (i == menuChoice)
+      LeftPrintActiveToScreen(items[i], 19 + i * 16);
+    else
+      LeftPrintToScreen(items[i], 19 + i * 16);
+  }
+}
+
+// Explored part of the level, one pixel per cell with north up: walls and doors that were seen,
+// locked doors blink slowly, the exit fast, the player blinks with a pixel in front of him
+static void drawMap()
+{
+  for (int y = 0; y < DOOM_LEVEL_HEIGHT; y++)
+  {
+    int screenY = DOOM_MAP_TOP + DOOM_LEVEL_HEIGHT - 1 - y;
+    for (int x = 0; x < DOOM_LEVEL_WIDTH; x++)
+    {
+      if (!isSeen(y * DOOM_LEVEL_WIDTH + x))
+        continue;
+      int block = getBlock(x, y);
+      DoomDoor *door = block == BLOCK_DOOR || block == BLOCK_LOCKED_DOOR ? doorAt(x, y) : nullptr;
+      bool visible = block == BLOCK_WALL || (door && (!door->locked || frameCount % 16 < 12)) || (block == BLOCK_EXIT && frameCount % 8 < 4);
+      if (visible)
+        screen.drawPixel(x, screenY);
+    }
+  }
+
+  if (frameCount % 8 < 6)
+  {
+    int px = (int)floor(playerPos.x);
+    int py = DOOM_MAP_TOP + DOOM_LEVEL_HEIGHT - 1 - (int)floor(playerPos.y);
+    screen.drawPixel(px, py);
+    screen.drawPixel((int)floor(playerPos.x + playerDir.x * 1.5f), DOOM_MAP_TOP + DOOM_LEVEL_HEIGHT - 1 - (int)floor(playerPos.y + playerDir.y * 1.5f));
+  }
+
+  char buf[16];
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_6x10_tr);
+  screen.drawStr(DOOM_MAP_INFO_X, 4, "Kills");
+  snprintf(buf, sizeof(buf), "%d/%d", kills, enemyTotal);
+  screen.drawStr(DOOM_MAP_INFO_X, 15, buf);
+  screen.drawStr(DOOM_MAP_INFO_X, 34, "Time");
+  formatTime(buf, sizeof(buf), (unsigned long)runTime);
+  screen.drawStr(DOOM_MAP_INFO_X, 45, buf);
+}
+
 static void drawLogo()
 {
   int left = (DOOM_SCREEN_WIDTH - BMP_LOGO_WIDTH) / 2;
@@ -1269,11 +1343,6 @@ static void updatePlaying(float dt, int steps, bool pressed)
   }
 }
 
-static void formatTime(char *buf, size_t size, unsigned long seconds)
-{
-  snprintf(buf, size, "%lu:%02lu", seconds / 60, seconds % 60);
-}
-
 bool doomFrame(float dt, int steps, bool click, unsigned long now)
 {
   frameCount++;
@@ -1319,7 +1388,7 @@ bool doomFrame(float dt, int steps, bool click, unsigned long now)
     break;
 
   case DOOM_PAUSED:
-    menuChoice = gameSelectChoice(steps, menuChoice);
+    menuChoice = constrain(menuChoice + steps, 0, 2);
     if (click && ignoreClick)
     {
       ignoreClick = false;
@@ -1331,13 +1400,25 @@ bool doomFrame(float dt, int steps, bool click, unsigned long now)
         doomState = DOOM_PLAYING;
         gameResetPressure(); // the scale may have drifted during the pause
       }
+      else if (menuChoice == 1)
+      {
+        doomState = DOOM_MAP;
+      }
       else
       {
         gameExit();
       }
     }
-    snprintf(buf, sizeof(buf), "Kills: %d/%d", kills, enemyTotal);
-    gameDrawChoiceScreen("Paused", buf, "Continue", "Exit", menuChoice);
+    if (doomState == DOOM_MAP)
+      drawMap();
+    else
+      drawPauseMenu();
+    break;
+
+  case DOOM_MAP:
+    if (click)
+      doomState = DOOM_PAUSED; // back to the pause menu, Map stays selected
+    drawMap();
     break;
 
   case DOOM_DYING:
