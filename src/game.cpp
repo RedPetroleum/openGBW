@@ -7,6 +7,7 @@
 static const GameDefinition games[] = {
     {"Comet Blaster", cometBlasterReset, cometBlasterFrame},
     {"Curve Tracer", curveTracerReset, curveTracerFrame},
+    {"Doom Nano", doomReset, doomFrame},
 };
 static const int gameCount = sizeof(games) / sizeof(games[0]);
 
@@ -91,11 +92,13 @@ void gameResetPressure()
 
 // Returns how many grams the scale is pressed. Below the threshold the zero point follows scale drift.
 // With retare, a reading that stays constant above the threshold is taken as the new zero point.
-float gamePressedWeight(float dt, float threshold, bool retare)
+// With pull, pulling the scale up counts as input too (negative weight): the zero point only follows
+// within the threshold in both directions and a steady pull is retared like a steady press.
+float gamePressedWeight(float dt, float threshold, bool retare, bool pull)
 {
   float reading = scaleWeight;
   float weight = reading - weightBaseline;
-  if (weight < threshold)
+  if (weight < threshold && (!pull || weight > -threshold))
   {
     weightBaseline += (reading - weightBaseline) * min(1.0f, dt * GAME_BASELINE_FOLLOW);
     steadyTime = 0;

@@ -31,10 +31,12 @@ void cometBlasterReset();
 bool cometBlasterFrame(float dt, int steps, bool click, unsigned long now);
 void curveTracerReset();
 bool curveTracerFrame(float dt, int steps, bool click, unsigned long now);
+void doomReset();
+bool doomFrame(float dt, int steps, bool click, unsigned long now);
 
 // Scale pressure
 void gameResetPressure();                                    // takes the current reading as zero point
-float gamePressedWeight(float dt, float threshold, bool retare); // grams pressed, see game.cpp
+float gamePressedWeight(float dt, float threshold, bool retare, bool pull = false); // grams pressed, see game.cpp
 
 // Screens and flow
 int gameSelectChoice(int steps, int choice); // knob selects the first (0) or second (1) option
