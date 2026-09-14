@@ -3,14 +3,14 @@
 #include "doom_data.hpp"
 
 // Doom: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom.
-// Pressing the scale walks forward, the knob turns, a click fires, pulling the scale up reloads and
-// holding the knob opens the pause menu. Find the exit, locked doors need a key.
+// Pressing the scale walks forward, pulling it up walks backward, the knob turns, a click fires and
+// holding the knob opens the pause menu. Dead enemies drop ammo. Find the exit, locked doors need a key.
 //
 // Based on doom-nano by daveruiz (https://github.com/daveruiz/doom-nano, commit 2346404): raycaster, enemies,
 // sprites, font and level. The doors are based on Doom-Nano-ESP32 by ZelTroN-2k3
 // (https://github.com/ZelTroN-2k3/Doom-Nano-ESP32, commit 768fe21).
 // Reworked for this firmware: one frame per call, times in seconds instead of frames, knob and scale as controller,
-// magazine and reloading, enemies and items do not come back, no shooting through walls, no sound.
+// ammo dropped by enemies, enemies and items do not come back, no shooting through walls, no sound.
 
 // Timing
 #define DOOM_INTRO_MS 1500              // logo before the level starts
@@ -28,12 +28,12 @@
 
 // Scale
 #define DOOM_ZERO_THRESHOLD 6.0f        // within this many grams the zero point follows scale drift
-#define DOOM_WALK_MIN_WEIGHT 15.0f      // grams pressed before the player walks (ignores noise) ...
-#define DOOM_WALK_FULL_WEIGHT 120.0f    // ... up to full speed at this weight
-#define DOOM_RELOAD_WEIGHT -15.0f       // pulling the scale up by this many grams reloads
+#define DOOM_WALK_MIN_WEIGHT 15.0f      // grams pressed or pulled before the player walks (ignores noise) ...
+#define DOOM_WALK_FULL_WEIGHT 120.0f    // ... up to full speed forward when pressed this much ...
+#define DOOM_BACK_FULL_WEIGHT 60.0f     // ... and backward when pulled this much (pulling is harder than pressing)
 
 // Player
-#define DOOM_WALK_SPEED 2.5f            // cells per second at full pressure
+#define DOOM_WALK_SPEED 2.5f            // cells per second at full pressure, forward and backward
 #define DOOM_WALK_SLOWEST 0.25f         // speed at the lightest press, relative to full speed
 #define DOOM_WALK_EASING 8.0f           // how fast the speed follows the pressure (1/s)
 #define DOOM_PLAYER_RADIUS 0.2f         // distance kept to walls
@@ -43,10 +43,11 @@
 #define DOOM_JOG_HEIGHT 6.0f            // pixels the view bobs at full speed
 
 // Gun
-#define DOOM_MAGAZINE 8                 // shots until the gun has to be reloaded
+#define DOOM_AMMO_START 30              // bullets at the start of the level
+#define DOOM_AMMO_MAX 99
+#define DOOM_AMMO_DROP 10               // bullets in the clip a dead enemy drops
 #define DOOM_SHOT_TIME 0.27f            // recoil; a click during it fires when it is over
 #define DOOM_MUZZLE_TIME 0.13f          // the muzzle flash is shown at the beginning of the recoil
-#define DOOM_RELOAD_TIME 0.9f           // the gun goes down and comes back up full
 #define DOOM_RAISE_TIME 0.3f            // the gun comes up at the start of the level
 #define DOOM_GUN_DAMAGE 30.0f           // damage of a hit in the center of a close enemy ...
 #define DOOM_GUN_FULL_RANGE 2.0f        // ... up to this many cells away ...
@@ -93,7 +94,6 @@
 #define DOOM_FAR 100.0f                 // depth of columns without a wall
 #define DOOM_GUN_TARGET_POS 18          // pixels of the gun above the bottom of the view
 #define DOOM_GUN_RECOIL 4               // the gun jumps up this far when firing
-#define DOOM_GUN_RELOAD_DROP 16         // the gun goes down this far while reloading
 
 // Blocks of the level, one per cell
 enum DoomBlock
@@ -107,6 +107,27 @@ enum DoomBlock
   BLOCK_MEDIKIT = 0x8,
   BLOCK_KEY = 0x9,
   BLOCK_WALL = 0xF
+};
+
+// Clip of bullets dropped by dead enemies, drawn like the items (one bit per pixel, highest bit leftmost)
+#define AMMO_WIDTH 16
+#define AMMO_HEIGHT 16
+static const uint8_t ammoBits[] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x11, 0x10, // ...#...#...#....
+    0x3b, 0xb8, // ..###.###.###...
+    0x2a, 0xa8, // ..#.#.#.#.#.#...
+    0x7f, 0xfc, // .#############..
+    0x40, 0x04, // .#...........#..
+    0x5f, 0xf4, // .#.#########.#..
+    0x55, 0x54, // .#.#.#.#.#.#.#..
+    0x5f, 0xf4, // .#.#########.#..
+    0x40, 0x04, // .#...........#..
+    0x7f, 0xfc, // .#############..
+};
+static const uint8_t ammoMask[] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x11, 0x10, 0x3b, 0xb8, 0x3b, 0xb8, 0x7f, 0xfc, 0x7f, 0xfc, 0x7f, 0xfc, 0x7f, 0xfc, 0x7f, 0xfc, 0x7f, 0xfc, 0x7f, 0xfc,
 };
 
 enum DoomState
@@ -125,6 +146,7 @@ enum EntityType
   ENTITY_ENEMY,
   ENTITY_MEDIKIT,
   ENTITY_KEY,
+  ENTITY_AMMO,
   ENTITY_FIREBALL
 };
 
@@ -195,7 +217,6 @@ static float viewSink;                // pixels the view has sunk when the playe
 static int ammo;
 static float shotTimer;               // recoil left
 static bool shotQueued;               // clicked during the recoil
-static float reloadTimer;             // time left while reloading
 static float raiseTimer;              // time left while the gun comes up
 
 // Level
@@ -204,6 +225,7 @@ static int entityCount;
 static DoomDoor doors[DOOM_MAX_DOORS];
 static int doorCount;
 static uint8_t clearedCells[(DOOM_LEVEL_WIDTH * DOOM_LEVEL_HEIGHT + 7) / 8]; // killed enemies and picked up items
+static uint8_t ammoDrops[DOOM_LEVEL_WIDTH * DOOM_LEVEL_HEIGHT]; // clips lying in each cell
 static int kills;
 static int enemyTotal;
 static float runTime;                 // seconds played in this level
@@ -276,6 +298,7 @@ static void startLevel()
   enemyTotal = 0;
   kills = 0;
   memset(clearedCells, 0, sizeof(clearedCells));
+  memset(ammoDrops, 0, sizeof(ammoDrops));
   playerPos = {1.5f, 1.5f};
   for (int y = 0; y < DOOM_LEVEL_HEIGHT; y++)
   {
@@ -299,10 +322,9 @@ static void startLevel()
   turnRemaining = 0;
   jogging = 0;
   viewSink = 0;
-  ammo = DOOM_MAGAZINE;
+  ammo = DOOM_AMMO_START;
   shotTimer = 0;
   shotQueued = false;
-  reloadTimer = 0;
   raiseTimer = DOOM_RAISE_TIME;
   runTime = 0;
   fadeTimer = DOOM_FADE_TIME;
@@ -536,11 +558,11 @@ static void removeEntity(int index)
     entities[i] = entities[i + 1];
 }
 
-static bool isSpawned(int cell)
+static bool isSpawned(int cell, EntityType type)
 {
   for (int i = 0; i < entityCount; i++)
   {
-    if (entities[i].cell == cell)
+    if (entities[i].cell == cell && entities[i].type == type)
       return true;
   }
   return false;
@@ -550,13 +572,24 @@ static bool isSpawned(int cell)
 static void spawnEntity(int block, int x, int y)
 {
   int cell = y * DOOM_LEVEL_WIDTH + x;
-  if (entityCount >= DOOM_MAX_ENTITIES || isCleared(cell) || isSpawned(cell))
+  EntityType type = block == BLOCK_ENEMY ? ENTITY_ENEMY : block == BLOCK_KEY ? ENTITY_KEY : ENTITY_MEDIKIT;
+  if (entityCount >= DOOM_MAX_ENTITIES || isCleared(cell) || isSpawned(cell, type))
     return;
   DoomVec pos = {x + 0.5f, y + 0.5f};
   if (distanceTo(pos, playerPos) >= DOOM_ENTITY_DISTANCE)
     return;
-  EntityType type = block == BLOCK_ENEMY ? ENTITY_ENEMY : block == BLOCK_KEY ? ENTITY_KEY : ENTITY_MEDIKIT;
   entities[entityCount++] = {type, cell, pos, ENEMY_STAND, DOOM_ENEMY_HEALTH, 0, distanceTo(pos, playerPos), 0};
+}
+
+// Ammo dropped by enemies, created when it is dropped and again when a ray passes its cell
+static void spawnAmmo(int cell)
+{
+  if (entityCount >= DOOM_MAX_ENTITIES || isSpawned(cell, ENTITY_AMMO))
+    return;
+  DoomVec pos = {cell % DOOM_LEVEL_WIDTH + 0.5f, cell / DOOM_LEVEL_WIDTH + 0.5f};
+  if (distanceTo(pos, playerPos) >= DOOM_ENTITY_DISTANCE)
+    return;
+  entities[entityCount++] = {ENTITY_AMMO, cell, pos, ENEMY_STAND, 0, 0, distanceTo(pos, playerPos), 0};
 }
 
 static void spawnFireball(const DoomVec &from)
@@ -583,6 +616,9 @@ static void updateEnemy(DoomEntity &e, float dt)
       e.timer = DOOM_ENEMY_DYING_TIME;
       setCleared(e.cell); // the corpse stays, but the enemy does not come back
       kills++;
+      int dropCell = (int)floor(e.pos.y) * DOOM_LEVEL_WIDTH + (int)floor(e.pos.x);
+      ammoDrops[dropCell] = min(255, ammoDrops[dropCell] + 1);
+      spawnAmmo(dropCell);
     }
     return;
   }
@@ -683,6 +719,17 @@ static void updateEntities(float dt)
         health = min(DOOM_HEALTH_MAX, health + DOOM_MEDIKIT_HEALTH);
         flashTimer = DOOM_FLASH_TIME;
         setCleared(e.cell);
+        removeEntity(i);
+        continue;
+      }
+      break;
+
+    case ENTITY_AMMO:
+      if (e.distance < DOOM_ITEM_RADIUS && health > 0 && ammo < DOOM_AMMO_MAX)
+      {
+        ammo = min(DOOM_AMMO_MAX, ammo + DOOM_AMMO_DROP * ammoDrops[e.cell]);
+        ammoDrops[e.cell] = 0;
+        flashTimer = DOOM_FLASH_TIME;
         removeEntity(i);
         continue;
       }
@@ -852,9 +899,13 @@ static void renderMap(float viewBob)
             door = nullptr;
         }
       }
-      else if (block == BLOCK_ENEMY || block == BLOCK_MEDIKIT || block == BLOCK_KEY)
+      else if (mapX >= 0 && mapX < DOOM_LEVEL_WIDTH && mapY >= 0 && mapY < DOOM_LEVEL_HEIGHT)
       {
-        spawnEntity(block, mapX, mapY);
+        if (block == BLOCK_ENEMY || block == BLOCK_MEDIKIT || block == BLOCK_KEY)
+          spawnEntity(block, mapX, mapY);
+        int cell = mapY * DOOM_LEVEL_WIDTH + mapX;
+        if (ammoDrops[cell])
+          spawnAmmo(cell);
       }
     }
 
@@ -985,6 +1036,9 @@ static void renderEntities(float viewBob, unsigned long now)
       drawSprite(screenX - BMP_ITEMS_WIDTH / 2 / view.y, screenY + 5 / view.y, bmp_items_bits, bmp_items_mask,
                  BMP_ITEMS_WIDTH, BMP_ITEMS_HEIGHT, e.type == ENTITY_KEY ? 1 : 0, view.y);
       break;
+    case ENTITY_AMMO:
+      drawSprite(screenX - AMMO_WIDTH / 2 / view.y, screenY + 5 / view.y, ammoBits, ammoMask, AMMO_WIDTH, AMMO_HEIGHT, 0, view.y);
+      break;
     }
   }
 }
@@ -992,10 +1046,7 @@ static void renderEntities(float viewBob, unsigned long now)
 static void renderGun(unsigned long now)
 {
   float gunPos = DOOM_GUN_TARGET_POS;
-  if (reloadTimer > 0)
-    gunPos -= DOOM_GUN_RELOAD_DROP * sin(PI * (1 - reloadTimer / DOOM_RELOAD_TIME)); // down and back up
-  else
-    gunPos += DOOM_GUN_RECOIL * shotTimer / DOOM_SHOT_TIME;
+  gunPos += DOOM_GUN_RECOIL * shotTimer / DOOM_SHOT_TIME;
   if (raiseTimer > 0)
     gunPos *= 1 - raiseTimer / DOOM_RAISE_TIME;
   gunPos -= viewSink * 2;
@@ -1038,18 +1089,14 @@ static void renderHud()
   snprintf(buf, sizeof(buf), "%d", keys);
   drawText(46, DOOM_HUD_Y, buf);
 
-  // One bar per bullet, the magazine blinks while reloading and when it is empty
-  bool blink = (reloadTimer > 0 || ammo == 0) && frameCount % 8 < 4;
-  for (int i = 0; i < DOOM_MAGAZINE; i++)
-  {
-    int x = DOOM_SCREEN_WIDTH - (DOOM_MAGAZINE - i) * 4;
-    if (blink)
-      continue;
-    if (i < ammo)
-      screen.drawBox(x, DOOM_HUD_Y, 2, 6);
-    else
-      screen.drawPixel(x, DOOM_HUD_Y + 5);
-  }
+  // Bullet symbol and ammo on the right, blinking when empty
+  if (ammo == 0 && frameCount % 8 < 4)
+    return;
+  snprintf(buf, sizeof(buf), "%d", ammo);
+  int x = DOOM_SCREEN_WIDTH - textWidth(buf);
+  drawText(x, DOOM_HUD_Y, buf);
+  screen.drawPixel(x - 4, DOOM_HUD_Y);
+  screen.drawBox(x - 5, DOOM_HUD_Y + 1, 3, 5);
 }
 
 static void renderMessage()
@@ -1127,7 +1174,7 @@ static void updatePlaying(float dt, int steps, bool pressed)
   turnRemaining -= turn;
   rotateView(turn);
 
-  // Scale: pressing walks, pulling reloads
+  // Scale: pressing walks forward, pulling walks backward
   float weight = gamePressedWeight(dt, DOOM_ZERO_THRESHOLD, true, true);
   float targetSpeed = 0;
   if (weight >= DOOM_WALK_MIN_WEIGHT)
@@ -1135,34 +1182,23 @@ static void updatePlaying(float dt, int steps, bool pressed)
     float pressure = min(1.0f, (weight - DOOM_WALK_MIN_WEIGHT) / (DOOM_WALK_FULL_WEIGHT - DOOM_WALK_MIN_WEIGHT));
     targetSpeed = mix(DOOM_WALK_SLOWEST, 1.0f, pressure) * DOOM_WALK_SPEED;
   }
+  else if (weight <= -DOOM_WALK_MIN_WEIGHT)
+  {
+    float pull = min(1.0f, (-weight - DOOM_WALK_MIN_WEIGHT) / (DOOM_BACK_FULL_WEIGHT - DOOM_WALK_MIN_WEIGHT));
+    targetSpeed = -mix(DOOM_WALK_SLOWEST, 1.0f, pull) * DOOM_WALK_SPEED;
+  }
   speed += (targetSpeed - speed) * min(1.0f, dt * DOOM_WALK_EASING);
-  if (speed < 0.01f)
+  if (fabs(speed) < 0.01f)
     speed = 0;
-  jogging = speed / DOOM_WALK_SPEED;
+  jogging = fabs(speed) / DOOM_WALK_SPEED;
   movePlayer(playerDir.x * speed * dt, playerDir.y * speed * dt);
 
-  if (weight <= DOOM_RELOAD_WEIGHT && ammo < DOOM_MAGAZINE && reloadTimer <= 0)
-  {
-    reloadTimer = DOOM_RELOAD_TIME;
-    shotQueued = false;
-    messageTimer = 0; // the reload hint is done
-  }
-
   // Gun
-  if (reloadTimer > 0)
-  {
-    reloadTimer -= dt;
-    if (reloadTimer <= 0)
-    {
-      reloadTimer = 0;
-      ammo = DOOM_MAGAZINE;
-    }
-  }
   shotTimer = max(0.0f, shotTimer - dt);
-  if (pressed && reloadTimer <= 0 && raiseTimer <= 0)
+  if (pressed && raiseTimer <= 0)
   {
     if (ammo == 0)
-      showMessage("PULL SCALE UP TO RELOAD");
+      showMessage("NO AMMO");
     else
       shotQueued = true;
   }
