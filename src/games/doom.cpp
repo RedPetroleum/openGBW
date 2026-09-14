@@ -86,7 +86,8 @@
 #define DOOM_SCREEN_WIDTH 128
 #define DOOM_HALF_WIDTH 64
 #define DOOM_VIEW_HEIGHT 56             // 3D view, the HUD is below
-#define DOOM_HUD_Y 58
+#define DOOM_HUD_Y 58                   // top of the numbers and the heart, the bottom row of the screen is their bottom
+#define DOOM_HUD_KEY_GAP 2              // pixels between the key icons
 #define DOOM_MAX_DEPTH 12               // cells a ray travels
 #define DOOM_MAX_SPRITE_DEPTH 8.0f      // sprites farther away are not drawn
 #define DOOM_MIN_WALL_DISTANCE 0.2f     // closer walls are drawn at this distance
@@ -106,6 +107,38 @@ enum DoomBlock
   BLOCK_MEDIKIT = 0x8,
   BLOCK_KEY = 0x9,
   BLOCK_WALL = 0xF
+};
+
+// HUD icons: health on the left, one icon per key in the middle, ammo on the right
+#define HEART_WIDTH 7
+#define HEART_HEIGHT 6
+static const uint16_t heartRows[HEART_HEIGHT] = {
+    0b0110110,
+    0b1111111,
+    0b1111111,
+    0b0111110,
+    0b0011100,
+    0b0001000,
+};
+
+#define KEY_WIDTH 7
+#define KEY_HEIGHT 4
+static const uint16_t keyRows[KEY_HEIGHT] = {
+    0b0110000,
+    0b1001111,
+    0b1001010,
+    0b0110000,
+};
+
+#define CROSSHAIR_SIZE 7
+static const uint16_t crosshairRows[CROSSHAIR_SIZE] = {
+    0b0001000,
+    0b0001000,
+    0b0000000,
+    0b1101011,
+    0b0000000,
+    0b0001000,
+    0b0001000,
 };
 
 // Clip of bullets dropped by dead enemies, drawn like the items (one bit per pixel, highest bit leftmost)
@@ -1081,21 +1114,25 @@ static void renderGun(unsigned long now)
 static void renderHud()
 {
   char buf[8];
-  drawText(2, DOOM_HUD_Y, "{}"); // health symbol
-  snprintf(buf, sizeof(buf), "%d", health);
-  drawText(12, DOOM_HUD_Y, buf);
-  drawText(36, DOOM_HUD_Y, "[]"); // key symbol
-  snprintf(buf, sizeof(buf), "%d", keys);
-  drawText(46, DOOM_HUD_Y, buf);
+  screen.setFont(u8g2_font_5x7_tr);
+  screen.setFontPosTop();
 
-  // Bullet symbol and ammo on the right, blinking when empty
+  // The font has an empty row above the digits, the icons are centered on the digits
+  drawBitmap(heartRows, HEART_WIDTH, HEART_HEIGHT, 0, DOOM_HUD_Y, 0);
+  snprintf(buf, sizeof(buf), "%d", health);
+  screen.drawStr(HEART_WIDTH + 2, DOOM_HUD_Y - 1, buf);
+
+  int keysWidth = keys * (KEY_WIDTH + DOOM_HUD_KEY_GAP) - DOOM_HUD_KEY_GAP;
+  for (int i = 0; i < keys; i++)
+    drawBitmap(keyRows, KEY_WIDTH, KEY_HEIGHT, DOOM_HALF_WIDTH - keysWidth / 2 + i * (KEY_WIDTH + DOOM_HUD_KEY_GAP), DOOM_HUD_Y + 1, 0);
+
+  // Ammo blinks when it is empty
   if (ammo == 0 && frameCount % 8 < 4)
     return;
   snprintf(buf, sizeof(buf), "%d", ammo);
-  int x = DOOM_SCREEN_WIDTH - textWidth(buf);
-  drawText(x, DOOM_HUD_Y, buf);
-  screen.drawPixel(x - 4, DOOM_HUD_Y);
-  screen.drawBox(x - 5, DOOM_HUD_Y + 1, 3, 5);
+  int x = DOOM_SCREEN_WIDTH - screen.getStrWidth(buf);
+  screen.drawStr(x, DOOM_HUD_Y - 1, buf);
+  drawBitmap(crosshairRows, CROSSHAIR_SIZE, CROSSHAIR_SIZE, x - CROSSHAIR_SIZE - 2, DOOM_HUD_Y - 1, 0);
 }
 
 static void renderMessage()
