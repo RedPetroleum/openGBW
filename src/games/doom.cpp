@@ -29,8 +29,7 @@
 // Scale
 #define DOOM_ZERO_THRESHOLD 6.0f        // within this many grams the zero point follows scale drift
 #define DOOM_WALK_MIN_WEIGHT 15.0f      // grams pressed or pulled before the player walks (ignores noise) ...
-#define DOOM_WALK_FULL_WEIGHT 120.0f    // ... up to full speed forward when pressed this much ...
-#define DOOM_BACK_FULL_WEIGHT 60.0f     // ... and backward when pulled this much (pulling is harder than pressing)
+#define DOOM_WALK_FULL_WEIGHT 60.0f     // ... up to full speed at this weight, forward and backward
 
 // Player
 #define DOOM_WALK_SPEED 2.5f            // cells per second at full pressure, forward and backward
@@ -1184,7 +1183,7 @@ static void updatePlaying(float dt, int steps, bool pressed)
   }
   else if (weight <= -DOOM_WALK_MIN_WEIGHT)
   {
-    float pull = min(1.0f, (-weight - DOOM_WALK_MIN_WEIGHT) / (DOOM_BACK_FULL_WEIGHT - DOOM_WALK_MIN_WEIGHT));
+    float pull = min(1.0f, (-weight - DOOM_WALK_MIN_WEIGHT) / (DOOM_WALK_FULL_WEIGHT - DOOM_WALK_MIN_WEIGHT));
     targetSpeed = -mix(DOOM_WALK_SLOWEST, 1.0f, pull) * DOOM_WALK_SPEED;
   }
   speed += (targetSpeed - speed) * min(1.0f, dt * DOOM_WALK_EASING);
