@@ -2,12 +2,15 @@
 
 A grind by weight scale for the Eureka Mignon MCI. It works without a relay and should also work with other Mignon grinders. My build uses a 1kg load cell.
 
+<img src="3D/Mignon%20MCI/CAD.PNG" alt="CAD model of the Mignon MCI with the scale" width="400">
+
 -----------
 
 ### Differences
 
 Changes on top of the version this is based on (see [Origin](#origin)):
 
+- **3D models:** for the Mignon MCI (see [Hardware](#hardware-on-the-mignon-mci))
 - **Games:** Comet Blaster, Curve Tracer and Doom, controlled with the knob and the pressure on the scale
 - **Grinding:** two dosing cups; aborts on timeout (60 seconds), missing progress, a removed cup or a scale error, with the reason shown on the display; no early stop caused by vibration spikes and no interruption by the display timer
 - **Calibration:** "Scale Factor" menu to calibrate while watching the live weight (replaces the calibration with a 100g weight), scale factor shown in the Info Menu
@@ -18,6 +21,8 @@ Changes on top of the version this is based on (see [Origin](#origin)):
 -----------
 
 ### Hardware on the Mignon MCI
+
+**3D models:** the STL files for the MCI are in [3D/Mignon MCI](3D/Mignon%20MCI).
 
 **Power supply:** my version of the MCI has a 3.0V output, which I use to power the ESP32. It works, even though the ESP32 actually needs 3.3V. WiFi does not work at this voltage, though, which is why this version is not based on SyButter's latest state with WiFi and web server (see [Origin](#origin)).
 
@@ -44,7 +49,7 @@ The game **Doom** is based on [daveruiz/doom-nano](https://github.com/daveruiz/d
 
 ### Getting started
 
-1) 3D print the included models for a Eureka Mignon XL or design your own
+1) 3D print the included models for a Eureka Mignon MCI or Mignon XL or design your own
 2) flash the firmware onto an ESP32
 3) connect the display, load cell and rotary encoder to the ESP32 and connect the grinder (on the Mignon MCI see [Hardware](#hardware-on-the-mignon-mci), other grinders may need a relay). The pins are defined in `include/config.hpp`
 4) go into the menu by pressing the button of the rotary encoder and set your initial offset. -2g is a good enough starting value for a Mignon XL
