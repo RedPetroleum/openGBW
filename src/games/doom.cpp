@@ -2,7 +2,7 @@
 #include "rotary.hpp"
 #include "doom_data.hpp"
 
-// Doom Nano: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom.
+// Doom: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom.
 // Pressing the scale walks forward, the knob turns, a click fires, pulling the scale up reloads and
 // holding the knob opens the pause menu. Find the exit, locked doors need a key.
 //
@@ -13,8 +13,7 @@
 // magazine and reloading, enemies and items do not come back, no shooting through walls, no sound.
 
 // Timing
-#define DOOM_INTRO_MS 1500              // logo before the controls are shown
-#define DOOM_READY_MS 3600              // controls and countdown before the level starts
+#define DOOM_INTRO_MS 1500              // logo before the level starts
 #define DOOM_FADE_TIME 0.5f             // fade in at the start of the level
 #define DOOM_DEATH_TIME 1.8f            // the view sinks this long before the Game Over screen
 #define DOOM_EXIT_TIME 0.6f             // fade out at the exit before the Level Clear screen
@@ -113,7 +112,6 @@ enum DoomBlock
 enum DoomState
 {
   DOOM_INTRO,
-  DOOM_READY,
   DOOM_PLAYING,
   DOOM_PAUSED,
   DOOM_DYING,
@@ -316,8 +314,7 @@ static void startLevel()
     zbuffer[x] = DOOM_FAR;
 
   gameResetPressure();
-  doomState = DOOM_READY;
-  stateStartedAt = millis();
+  doomState = DOOM_PLAYING;
 }
 
 void doomReset()
@@ -325,6 +322,7 @@ void doomReset()
   bestTime = gameLoadBestScore("doomTime");
   startLevel();
   doomState = DOOM_INTRO;
+  stateStartedAt = millis();
 
   // The click that started the game must not fire, a knob still held must not open the pause menu
   buttonDown = rotaryEncoder.isEncoderButtonDown();
@@ -1188,13 +1186,13 @@ static void updatePlaying(float dt, int steps, bool pressed)
       newBestTime = true;
       gameSaveBestScore("doomTime", bestTime);
     }
-    Serial.printf("Doom Nano: level clear after %lus, %d of %d kills\n", seconds, kills, enemyTotal);
+    Serial.printf("Doom: level clear after %lus, %d of %d kills\n", seconds, kills, enemyTotal);
   }
   else if (health == 0)
   {
     doomState = DOOM_DYING;
     stateTime = 0;
-    Serial.printf("Doom Nano: died after %.0fs, %d of %d kills\n", runTime, kills, enemyTotal);
+    Serial.printf("Doom: died after %.0fs, %d of %d kills\n", runTime, kills, enemyTotal);
   }
 }
 
@@ -1209,7 +1207,7 @@ bool doomFrame(float dt, int steps, bool click, unsigned long now)
   bool pressed;
   bool longPress;
   readButton(now, pressed, longPress);
-  bool playing = doomState == DOOM_INTRO || doomState == DOOM_READY || doomState == DOOM_PLAYING ||
+  bool playing = doomState == DOOM_INTRO || doomState == DOOM_PLAYING ||
                  doomState == DOOM_DYING || doomState == DOOM_EXITING;
 
   char buf[32];
@@ -1217,26 +1215,17 @@ bool doomFrame(float dt, int steps, bool click, unsigned long now)
   switch (doomState)
   {
   case DOOM_INTRO:
+    gamePressedWeight(dt, DOOM_ZERO_THRESHOLD, false, true); // settles the zero point before the level
     if (pressed || now - stateStartedAt >= DOOM_INTRO_MS)
     {
-      doomState = DOOM_READY;
-      stateStartedAt = now;
-    }
-    drawLogo();
-    break;
-
-  case DOOM_READY:
-    gamePressedWeight(dt, DOOM_ZERO_THRESHOLD, false, true); // settles the zero point before the level
-    if (pressed || now - stateStartedAt >= DOOM_READY_MS)
-    {
-      doomState = DOOM_PLAYING; // a press skips the countdown
+      doomState = DOOM_PLAYING; // a press skips the logo, the level fades in
       longPressHandled = true;  // holding on does not open the pause menu
       renderView(now);
       fadeScreen(GRADIENT_COUNT - 1);
     }
     else
     {
-      gameDrawCountdown("DOOM NANO", "Press: walk  Pull: reload", "Turn: look  Click: fire", now - stateStartedAt, DOOM_READY_MS);
+      drawLogo();
     }
     break;
 

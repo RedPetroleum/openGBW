@@ -7,7 +7,7 @@
 static const GameDefinition games[] = {
     {"Comet Blaster", cometBlasterReset, cometBlasterFrame},
     {"Curve Tracer", curveTracerReset, curveTracerFrame},
-    {"Doom Nano", doomReset, doomFrame},
+    {"Doom", doomReset, doomFrame},
 };
 static const int gameCount = sizeof(games) / sizeof(games[0]);
 

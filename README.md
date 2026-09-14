@@ -8,7 +8,7 @@ A grind by weight scale for the Eureka Mignon MCI. It works without a relay and 
 
 Changes on top of the version this is based on (see [Origin](#origin)):
 
-- **Games:** Comet Blaster, Curve Tracer and Doom Nano, controlled with the knob and the pressure on the scale
+- **Games:** Comet Blaster, Curve Tracer and Doom, controlled with the knob and the pressure on the scale
 - **Grinding:** two dosing cups; aborts on timeout (60 seconds), missing progress, a removed cup or a scale error, with the reason shown on the display; no early stop caused by vibration spikes and no interruption by the display timer
 - **Calibration:** "Scale Factor" menu to calibrate while watching the live weight (replaces the calibration with a 100g weight), scale factor shown in the Info Menu
 - **Operation:** weights aligned on the decimal point, reworked menu (Exit first, cup weight menus can be left by turning), reversed encoder direction, continuous as default grinding mode, fixed sleep timer that is kept after a restart and wakes the display when the scale is tapped
@@ -38,7 +38,7 @@ This project has been passed on through several forks:
 3. **[SyButter/openGBW](https://github.com/SyButter/openGBW)** commented and restructured the code and added a confirmation screen and escape for the cup weight, the Info Menu, wake on rotary turn, the sleep timer in the menu, the shot counter and the Debug Menu.
 4. **This version** is based on SyButter's state of December 26, 2024 (commit `becc51d`), not on his latest state. His later changes (WiFi and web server, Seeed Studio XIAO ESP32-C3, PCB, switch start) are not included, mainly because WiFi does not work with the 3.0V supply of the MCI (see [Hardware](#hardware-on-the-mignon-mci)). On top of that come the [Differences](#differences) listed above.
 
-The game **Doom Nano** is based on [daveruiz/doom-nano](https://github.com/daveruiz/doom-nano) (raycaster, enemies, sprites, font and level) and the doors of [ZelTroN-2k3/Doom-Nano-ESP32](https://github.com/ZelTroN-2k3/Doom-Nano-ESP32), reworked for the knob and the scale.
+The game **Doom** is based on [daveruiz/doom-nano](https://github.com/daveruiz/doom-nano) (raycaster, enemies, sprites, font and level) and the doors of [ZelTroN-2k3/Doom-Nano-ESP32](https://github.com/ZelTroN-2k3/Doom-Nano-ESP32), reworked for the knob and the scale.
 
 -----------
 
@@ -102,8 +102,8 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 
 #### Games
 
-All games use the scale as a pressure sensor: remove the cup and press on the scale with your finger. Press the knob during a game to pause or exit (hold it in Doom Nano). The best score of each game is saved.
+All games use the scale as a pressure sensor: remove the cup and press on the scale with your finger. Press the knob during a game to pause or exit (hold it in Doom). The best score of each game is saved.
 
 - **Comet Blaster**: comets fly in from the right. Turn the knob to move your ship and press the scale to fire the laser: the harder you press, the wider and stronger the beam, but the more energy it uses. Comets have to be hit near their center and give points and energy, bigger comets give more. A collision costs a life; hearts flying by give extra lives, but only if you fly into them - the laser destroys them.
 - **Curve Tracer**: a line scrolls in from the right. The pen follows the pressure on the scale - the more you press, the higher it goes. Stay on the line to score points and build up a multiplier, leaving it drains the grip bar. The line gets faster and the curves get steeper over time.
-- **Doom Nano**: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom. Press the scale to walk forward (the harder, the faster), turn the knob to look around and click to fire. The magazine holds 8 shots: pull the scale up gently to reload. Doors open when you walk into them, locked doors need a key. Find the exit, the fastest time is saved.
+- **Doom**: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom. Press the scale to walk forward (the harder, the faster), turn the knob to look around and click to fire. The magazine holds 8 shots: pull the scale up gently to reload. Doors open when you walk into them, locked doors need a key. Find the exit, the fastest time is saved.
