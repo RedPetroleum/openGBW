@@ -10,8 +10,8 @@ A grind by weight scale for the Eureka Mignon MCI. It works without a relay and 
 
 Changes on top of the version this is based on (see [Origin](#origin)):
 
-- **3D models:** for the Mignon MCI (see [Hardware](#hardware-on-the-mignon-mci))
 - **Games:** Comet Blaster, Curve Tracer and Doom, controlled with the knob and the pressure on the scale
+- **3D models:** for the Mignon MCI (see [Hardware](#hardware-on-the-mignon-mci))
 - **Grinding:** two dosing cups; aborts on timeout (60 seconds), missing progress, a removed cup or a scale error, with the reason shown on the display; no early stop caused by vibration spikes and no interruption by the display timer
 - **Calibration:** "Scale Factor" menu to calibrate while watching the live weight (replaces the calibration with a 100g weight), scale factor shown in the Info Menu
 - **Operation:** weights aligned on the decimal point, reworked menu (Exit first, cup weight menus can be left by turning), reversed encoder direction, continuous as default grinding mode, fixed sleep timer that is kept after a restart and wakes the display when the scale is tapped
@@ -22,15 +22,26 @@ Changes on top of the version this is based on (see [Origin](#origin)):
 
 ### Hardware on the Mignon MCI
 
-**3D models:** the STL files for the MCI are in [3D/Mignon MCI](3D/Mignon%20MCI).
+#### Bill of materials
 
-**Power supply:** my version of the MCI has a 3.0V output, which I use to power the ESP32. It works, even though the ESP32 actually needs 3.3V. WiFi does not work at this voltage, though, which is why this version is not based on SyButter's latest state with WiFi and web server (see [Origin](#origin)).
+- ESP32 development board
+- OLED display 128x64 (SSD1306, I2C)
+- 1kg load cell with HX711 amplifier
+- Rotary encoder with push button
+- NPN transistor
+- Small resistor (e.g. 1 kOhm)
+- Wires
+- 3D printed parts from [3D/Mignon MCI](3D/Mignon%20MCI)
+
+#### Wiring
+
+**Power supply:** my version of the MCI has 3.0V output pins on the mainboard, which I use to power the ESP32. It works, even though the ESP32 actually needs 3.3V. WiFi does not work at this voltage, though, which is why this version is not based on SyButter's latest state with WiFi and web server (see [Origin](#origin)).
 
 **Starting the grinder:** the grinder is started by the switch at the top, below the coffee outlet, which carries a 12V signal. The ESP32 is wired in parallel to this switch: it drives a transistor from GPIO 25 through a small resistor, and the transistor switches the 12V signal just like the switch does. No relay is needed.
 
-**Manual mode:** openGBW only works when the MCI is set to manual mode. The grinder can still be used as before after installing openGBW: manually with the switch or with the timer.
+**Connection to base:** all electronics sit in the 3D printed base. For the three wires to the MCI (plus, minus and signal) I drilled a small hole in the bottom of the MCI.
 
-Opening the grinder and working on its electronics is at your own risk.
+*Opening the grinder and working on its electronics is at your own risk.*
 
 -----------
 
@@ -52,12 +63,11 @@ The game **Doom** is based on [daveruiz/doom-nano](https://github.com/daveruiz/d
 1) 3D print the included models for a Eureka Mignon MCI or Mignon XL or design your own
 2) flash the firmware onto an ESP32
 3) connect the display, load cell and rotary encoder to the ESP32 and connect the grinder (on the Mignon MCI see [Hardware](#hardware-on-the-mignon-mci), other grinders may need a relay). The pins are defined in `include/config.hpp`
-4) go into the menu by pressing the button of the rotary encoder and set your initial offset. -2g is a good enough starting value for a Mignon XL
+4) go into the menu by pressing the button of the rotary encoder and set your initial offset. -2g is a good enough starting value
 5) set the grinding mode: on the Mignon MCI use continuous (the default) and set the grinder to manual mode (see [Hardware](#hardware-on-the-mignon-mci)). Use impulse if your grinder needs a short pulse to start and another one to stop.
-6) if you only want to use the scale to check your weight when single dosing, set scale mode to scale only. This will not trigger any relay switching and start a timer when the weight begins to increase. If you'd like to build your own brew scale with timer, this is also the mode to use.
-7) calibrate your load cell: open "Scale Factor", place a known weight (e.g. 100g) on the scale and turn the knob until the live weight matches, then press to save
-8) set your dosing cup weights: open "Cup Weight 1", place the empty cup on the scale and press. Repeat with "Cup Weight 2" if you use a second cup
-9) exit the menu, set your desired weight and place one of your empty dosing cups on the scale. The first grind might be off by a bit - the accuracy will increase with each grind as the scale auto adjusts the grinding offset
+6) calibrate your load cell: open "Scale Factor", place a known weight on the scale and turn the knob until the live weight matches, then press to save
+7) set your dosing cup weights: open "Cup Weight 1", place the empty cup on the scale and press. Repeat with "Cup Weight 2" if you use a second cup or portafilter.
+8) set your desired weight and place one of your empty dosing cups on the scale. The grinding will start and stop automatically. The first grind might be off by a bit. The accuracy will increase with each grind as the scale auto adjusts the grinding offset
 
 -----------
 
@@ -66,17 +76,6 @@ The game **Doom** is based on [daveruiz/doom-nano](https://github.com/daveruiz/d
 #### Main screen
 
 Turn the knob to set the target weight. Place an empty dosing cup on the scale: as soon as it has rested on the scale for one second within 10g of one of the two saved cup weights, the grinder starts. After grinding the display shows the final weight and the grinding time. Remove the cup to get back to the main screen.
-
-#### Grinding aborts
-
-The grinder is stopped and the reason is shown when
-
-- grinding takes longer than 60 seconds ("Timeout")
-- the weight does not increase by at least 1g within 2 seconds, checked from 10 seconds after the start ("No progress")
-- the cup is lifted off the scale ("Cup removed")
-- the load cell stops responding ("Scale error")
-
-Press the knob to leave the error screen.
 
 #### Menu
 
