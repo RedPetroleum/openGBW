@@ -87,7 +87,6 @@
 #define DOOM_HALF_WIDTH 64
 #define DOOM_VIEW_HEIGHT 56             // 3D view, the HUD is below
 #define DOOM_HUD_Y 58                   // top of the numbers and the heart, the bottom row of the screen is their bottom
-#define DOOM_HUD_KEY_GAP 2              // pixels between the key icons
 #define DOOM_MAX_DEPTH 12               // cells a ray travels
 #define DOOM_MAX_SPRITE_DEPTH 8.0f      // sprites farther away are not drawn
 #define DOOM_MIN_WALL_DISTANCE 0.2f     // closer walls are drawn at this distance
@@ -109,7 +108,7 @@ enum DoomBlock
   BLOCK_WALL = 0xF
 };
 
-// HUD icons: health on the left, one icon per key in the middle, ammo on the right
+// HUD icons: health on the left, keys in the middle, ammo on the right
 #define HEART_WIDTH 7
 #define HEART_HEIGHT 6
 static const uint16_t heartRows[HEART_HEIGHT] = {
@@ -121,13 +120,14 @@ static const uint16_t heartRows[HEART_HEIGHT] = {
     0b0001000,
 };
 
-#define KEY_WIDTH 7
-#define KEY_HEIGHT 4
+#define KEY_WIDTH 9
+#define KEY_HEIGHT 5
 static const uint16_t keyRows[KEY_HEIGHT] = {
-    0b0110000,
-    0b1001111,
-    0b1001010,
-    0b0110000,
+    0b011100000,
+    0b100010000,
+    0b100011111,
+    0b100010101,
+    0b011100101,
 };
 
 #define CROSSHAIR_SIZE 7
@@ -1122,9 +1122,10 @@ static void renderHud()
   snprintf(buf, sizeof(buf), "%d", health);
   screen.drawStr(HEART_WIDTH + 2, DOOM_HUD_Y - 1, buf);
 
-  int keysWidth = keys * (KEY_WIDTH + DOOM_HUD_KEY_GAP) - DOOM_HUD_KEY_GAP;
-  for (int i = 0; i < keys; i++)
-    drawBitmap(keyRows, KEY_WIDTH, KEY_HEIGHT, DOOM_HALF_WIDTH - keysWidth / 2 + i * (KEY_WIDTH + DOOM_HUD_KEY_GAP), DOOM_HUD_Y + 1, 0);
+  snprintf(buf, sizeof(buf), "%d", keys);
+  int keysX = DOOM_HALF_WIDTH - (KEY_WIDTH + 2 + screen.getStrWidth(buf)) / 2;
+  drawBitmap(keyRows, KEY_WIDTH, KEY_HEIGHT, keysX, DOOM_HUD_Y, 0);
+  screen.drawStr(keysX + KEY_WIDTH + 2, DOOM_HUD_Y - 1, buf);
 
   // Ammo blinks when it is empty
   if (ammo == 0 && frameCount % 8 < 4)
