@@ -1137,10 +1137,13 @@ static void renderHud()
   snprintf(buf, sizeof(buf), "%d", health);
   screen.drawStr(HEART_WIDTH + 2, DOOM_HUD_Y - 1, buf);
 
-  snprintf(buf, sizeof(buf), "%d", keys);
-  int keysX = DOOM_HALF_WIDTH - (KEY_WIDTH + 2 + screen.getStrWidth(buf)) / 2;
-  drawBitmap(keyRows, KEY_WIDTH, KEY_HEIGHT, keysX, DOOM_HUD_Y, 0);
-  screen.drawStr(keysX + KEY_WIDTH + 2, DOOM_HUD_Y - 1, buf);
+  if (keys > 0) // nothing in the middle without keys
+  {
+    snprintf(buf, sizeof(buf), "%d", keys);
+    int keysX = DOOM_HALF_WIDTH - (KEY_WIDTH + 2 + screen.getStrWidth(buf)) / 2;
+    drawBitmap(keyRows, KEY_WIDTH, KEY_HEIGHT, keysX, DOOM_HUD_Y, 0);
+    screen.drawStr(keysX + KEY_WIDTH + 2, DOOM_HUD_Y - 1, buf);
+  }
 
   // Ammo blinks when it is empty
   if (ammo == 0 && frameCount % 8 < 4)
