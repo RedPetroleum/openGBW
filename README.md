@@ -1,6 +1,6 @@
-# OpenGBW for the Eureka Mignon MCI
+# OpenGBW for the Eureka Mignon MCI with games
 
-A grind by weight scale for the Eureka Mignon MCI. It works without a relay and should also work with other Mignon grinders. My build uses a 1kg load cell.
+A grind by weight scale for the Eureka Mignon MCI with a 1kg load cell, support for a second dosing cup or portafilter and three games played with the knob and the scale. It works without a relay and should also work with other Mignon grinders.
 
 <img src="3D/Mignon%20MCI/CAD.PNG" alt="CAD model of the Mignon MCI with the scale" width="400">
 
@@ -77,6 +77,8 @@ The game **Doom** is based on [daveruiz/doom-nano](https://github.com/daveruiz/d
 
 Turn the knob to set the target weight. Place an empty dosing cup on the scale: as soon as it has rested on the scale for one second within 10g of one of the two saved cup weights, the grinder starts. After grinding the display shows the final weight and the grinding time. Remove the cup to get back to the main screen.
 
+<img src="screenshots/main.png" alt="Main screen with weight and target weight" width="256"> <img src="screenshots/grinding.png" alt="Display while grinding" width="256">
+
 #### Menu
 
 Press the knob on the main screen to open the menu, turn to select and press to open an item.
@@ -109,5 +111,13 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 All games use the scale as a pressure sensor: remove the cup and press on the scale with your finger. Press the knob during a game to pause or exit (hold it in Doom). The best score of each game is saved.
 
 - **Comet Blaster**: comets fly in from the right. Turn the knob to move your ship and press the scale to fire the laser: the harder you press, the wider and stronger the beam, but the more energy it uses. Comets have to be hit near their center and give points and energy, bigger comets give more. A collision costs a life; hearts flying by give extra lives, but only if you fly into them - the laser destroys them.
+
+  <img src="screenshots/comet-blaster.png" alt="Comet Blaster" width="256">
+
 - **Curve Tracer**: a line scrolls in from the right. The pen follows the pressure on the scale - the more you press, the higher it goes. Stay on the line to score points and build up a multiplier, leaving it drains the grip bar. The line gets faster and the curves get steeper over time.
+
+  <img src="screenshots/curve-tracer.png" alt="Curve Tracer" width="256">
+
 - **Doom**: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom. Press the scale to walk forward and pull it up gently to walk backward (the harder, the faster), turn the knob to look around and click to fire. Dead enemies drop ammo. Doors open when you walk into them, locked doors need a key. The pause menu has a map of the explored level. Find the exit, the fastest time is saved.
+
+  <img src="screenshots/doom-fire.png" alt="Doom" width="256">
