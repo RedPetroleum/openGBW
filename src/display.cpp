@@ -556,146 +556,151 @@ void handleDebugMenuAction()
 }
 
 
+// Draws the current state once (also used by the display simulator in sim/)
+void refreshDisplay()
+{
+  char buf[64];
+
+  if (displayLock)
+  {
+    delay(50); // Skip updating the display while locked
+    return;
+  }
+
+  screen.clearBuffer(); // Clear the display buffer
+  screen.clearBuffer(); // Clear the display buffer
+  if (displayAsleep())
+  {
+    screen.sendBuffer(); // Send the buffer to the display to "sleep"
+    delay(100);
+    scaleStatus = STATUS_EMPTY;
+    return;
+  }
+
+  if (scaleLastUpdatedAt == 0)
+  {
+    screen.setFontPosTop();
+    screen.drawStr(0, 20, "Initializing...");
+  }
+  else if (!scaleReady)
+  {
+    screen.setFontPosTop();
+    screen.drawStr(0, 20, "SCALE ERROR");
+  }
+  else
+  {
+    if (scaleStatus == STATUS_GRINDING_IN_PROGRESS)
+    {
+      screen.setFontPosTop();
+      screen.setFont(u8g2_font_7x13_tr);
+      CenterPrintToScreen("Grinding...", 0);
+
+      screen.setFontPosCenter();
+      screen.setFont(u8g2_font_7x14B_tf);
+      screen.setCursor(3, 32);
+      snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight - cupWeightEmpty);
+      screen.print(buf);
+
+      screen.setFontPosCenter();
+      screen.setFont(u8g2_font_unifont_t_symbols);
+      screen.drawGlyph(64, 32, 0x2794);
+
+      screen.setFontPosCenter();
+      screen.setFont(u8g2_font_7x14B_tf);
+      screen.setCursor(84, 32);
+      snprintf(buf, sizeof(buf), "%3.1fg", setWeight);
+      screen.print(buf);
+
+      screen.setFontPosBottom();
+      screen.setFont(u8g2_font_7x13_tr);
+      snprintf(buf, sizeof(buf), "%3.1fs", startedGrindingAt > 0 ? (double)(millis() - startedGrindingAt) / 1000 : 0);
+      CenterPrintToScreen(buf, 64);
+    }
+    else if (scaleStatus == STATUS_EMPTY)
+    {
+      screen.setFontPosTop();
+      screen.setFont(u8g2_font_7x13_tr);
+      CenterPrintToScreen("Weight:", 0);
+
+      screen.setFont(u8g2_font_7x14B_tf);
+      screen.setFontPosCenter();
+      WeightPrintToScreen(abs(scaleWeight), 32);
+
+      // Set weight is aligned on the decimal point below the measured weight, "Set:" sits left of it
+      screen.setFont(u8g2_font_7x13_tf);
+      screen.setFontPosCenter();
+      LeftPrintToScreen("Set:", 50);
+      WeightPrintToScreen(setWeight, 50);
+    }
+    else if (scaleStatus == STATUS_GRINDING_FAILED)
+    {
+      screen.setFontPosTop();
+      screen.setFont(u8g2_font_7x14B_tf);
+      CenterPrintToScreen("Grinding failed", 0);
+
+      screen.setFontPosTop();
+      screen.setFont(u8g2_font_7x13_tr);
+      CenterPrintToScreen(grindFailReason, 18);
+      CenterPrintToScreen("Press knob", 36);
+      CenterPrintToScreen("to reset", 50);
+    }
+    else if (scaleStatus == STATUS_GRINDING_FINISHED)
+    {
+      screen.setFontPosTop();
+      screen.setFont(u8g2_font_7x13_tr);
+      screen.setCursor(0, 0);
+      CenterPrintToScreen("Grinding finished", 0);
+
+      screen.setFontPosCenter();
+      screen.setFont(u8g2_font_7x14B_tf);
+      screen.setCursor(3, 32);
+      snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight - cupWeightEmpty);
+      screen.print(buf);
+
+      screen.setFontPosCenter();
+      screen.setFont(u8g2_font_unifont_t_symbols);
+      screen.drawGlyph(64, 32, 0x2794);
+
+      screen.setFontPosCenter();
+      screen.setFont(u8g2_font_7x14B_tf);
+      screen.setCursor(84, 32);
+      snprintf(buf, sizeof(buf), "%3.1fg", setWeight);
+      screen.print(buf);
+
+      screen.setFontPosBottom();
+      screen.setFont(u8g2_font_7x13_tr);
+      screen.setCursor(64, 64);
+      snprintf(buf, sizeof(buf), "%3.1fs", (double)(finishedGrindingAt - startedGrindingAt) / 1000);
+      CenterPrintToScreen(buf, 64);
+    }
+    else if (scaleStatus == STATUS_IN_MENU)
+    {
+      showMenu();
+    }
+    else if (scaleStatus == STATUS_IN_SUBMENU)
+    {
+      showSetting();
+    }
+    else if (scaleStatus == STATUS_INFO_MENU)
+    {
+      showInfoMenu(); // Continuously display the Info Menu while in this state
+      delay(100);     // Add a small delay to avoid rapid screen updates
+      return;         // Skip the rest of the update logic
+    }
+    else if (scaleStatus == STATUS_GAME)
+    {
+      gameLoop(); // Updates and draws one frame, paces itself
+    }
+  }
+  screen.sendBuffer(); // Send the buffer to the display
+}
+
 // Task to update the display with the current state
 void updateDisplay(void *parameter)
 {
-  char buf[64];
-  char buf2[64];
-
   for (;;)
   {
-    if (displayLock)
-    {
-      delay(50); // Skip updating the display while locked
-      continue;
-    }
-
-    screen.clearBuffer(); // Clear the display buffer
-    screen.clearBuffer(); // Clear the display buffer
-    if (displayAsleep())
-    {
-      screen.sendBuffer(); // Send the buffer to the display to "sleep"
-      delay(100);
-      scaleStatus = STATUS_EMPTY;
-      continue;
-    }
-
-    if (scaleLastUpdatedAt == 0)
-    {
-      screen.setFontPosTop();
-      screen.drawStr(0, 20, "Initializing...");
-    }
-    else if (!scaleReady)
-    {
-      screen.setFontPosTop();
-      screen.drawStr(0, 20, "SCALE ERROR");
-    }
-    else
-    {
-      if (scaleStatus == STATUS_GRINDING_IN_PROGRESS)
-      {
-        screen.setFontPosTop();
-        screen.setFont(u8g2_font_7x13_tr);
-        CenterPrintToScreen("Grinding...", 0);
-
-        screen.setFontPosCenter();
-        screen.setFont(u8g2_font_7x14B_tf);
-        screen.setCursor(3, 32);
-        snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight - cupWeightEmpty);
-        screen.print(buf);
-
-        screen.setFontPosCenter();
-        screen.setFont(u8g2_font_unifont_t_symbols);
-        screen.drawGlyph(64, 32, 0x2794);
-
-        screen.setFontPosCenter();
-        screen.setFont(u8g2_font_7x14B_tf);
-        screen.setCursor(84, 32);
-        snprintf(buf, sizeof(buf), "%3.1fg", setWeight);
-        screen.print(buf);
-
-        screen.setFontPosBottom();
-        screen.setFont(u8g2_font_7x13_tr);
-        snprintf(buf, sizeof(buf), "%3.1fs", startedGrindingAt > 0 ? (double)(millis() - startedGrindingAt) / 1000 : 0);
-        CenterPrintToScreen(buf, 64);
-      }
-      else if (scaleStatus == STATUS_EMPTY)
-      {
-        screen.setFontPosTop();
-        screen.setFont(u8g2_font_7x13_tr);
-        CenterPrintToScreen("Weight:", 0);
-
-        screen.setFont(u8g2_font_7x14B_tf);
-        screen.setFontPosCenter();
-        WeightPrintToScreen(abs(scaleWeight), 32);
-
-        // Set weight is aligned on the decimal point below the measured weight, "Set:" sits left of it
-        screen.setFont(u8g2_font_7x13_tf);
-        screen.setFontPosCenter();
-        LeftPrintToScreen("Set:", 50);
-        WeightPrintToScreen(setWeight, 50);
-      }
-      else if (scaleStatus == STATUS_GRINDING_FAILED)
-      {
-        screen.setFontPosTop();
-        screen.setFont(u8g2_font_7x14B_tf);
-        CenterPrintToScreen("Grinding failed", 0);
-
-        screen.setFontPosTop();
-        screen.setFont(u8g2_font_7x13_tr);
-        CenterPrintToScreen(grindFailReason, 18);
-        CenterPrintToScreen("Press knob", 36);
-        CenterPrintToScreen("to reset", 50);
-      }
-      else if (scaleStatus == STATUS_GRINDING_FINISHED)
-      {
-        screen.setFontPosTop();
-        screen.setFont(u8g2_font_7x13_tr);
-        screen.setCursor(0, 0);
-        CenterPrintToScreen("Grinding finished", 0);
-
-        screen.setFontPosCenter();
-        screen.setFont(u8g2_font_7x14B_tf);
-        screen.setCursor(3, 32);
-        snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight - cupWeightEmpty);
-        screen.print(buf);
-
-        screen.setFontPosCenter();
-        screen.setFont(u8g2_font_unifont_t_symbols);
-        screen.drawGlyph(64, 32, 0x2794);
-
-        screen.setFontPosCenter();
-        screen.setFont(u8g2_font_7x14B_tf);
-        screen.setCursor(84, 32);
-        snprintf(buf, sizeof(buf), "%3.1fg", setWeight);
-        screen.print(buf);
-
-        screen.setFontPosBottom();
-        screen.setFont(u8g2_font_7x13_tr);
-        screen.setCursor(64, 64);
-        snprintf(buf, sizeof(buf), "%3.1fs", (double)(finishedGrindingAt - startedGrindingAt) / 1000);
-        CenterPrintToScreen(buf, 64);
-      }
-      else if (scaleStatus == STATUS_IN_MENU)
-      {
-        showMenu();
-      }
-      else if (scaleStatus == STATUS_IN_SUBMENU)
-      {
-        showSetting();
-      }
-      else if (scaleStatus == STATUS_INFO_MENU)
-      {
-        showInfoMenu(); // Continuously display the Info Menu while in this state
-        delay(100);     // Add a small delay to avoid rapid screen updates
-        continue;       // Skip the rest of the update logic
-      }
-      else if (scaleStatus == STATUS_GAME)
-      {
-        gameLoop(); // Updates and draws one frame, paces itself
-      }
-    }
-    screen.sendBuffer(); // Send the buffer to the display
+    refreshDisplay();
   }
 }
 

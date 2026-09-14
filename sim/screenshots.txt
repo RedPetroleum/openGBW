@@ -1,0 +1,59 @@
+# Screenshots of all screens, run with "make screenshots" in sim/
+# Every [section] starts from a freshly started firmware. Commands: see README.md
+
+[main screen]
+shot main
+
+[grinding]
+set cupWeightEmpty 396.1; weight 405.3; set scaleStatus 1; set grindTime 4.2
+draw; shot grinding
+set scaleStatus 2; weight 413.6; set grindTime 7.9
+draw; shot grinding-finished
+set scaleStatus 3; set grindFailReason Cup removed
+draw; shot grinding-failed
+
+[menu]
+click; shot menu
+turn 1; click; shot cup-weight-1
+turn 1; turn 2; click; weight 3.2; wait 200; shot scale-factor
+click; turn 1; click; shot offset
+click; turn 1; click; shot scale-mode
+click; turn 1; click; shot grinding-mode
+click; turn 1; click; shot info
+click; turn 1; click; shot sleep-timer
+click; turn 1; click; shot reset
+click; turn 1; click; shot games-menu
+click; turn 1; click; shot debug-menu
+
+[debug menu]
+grind 305 8.1 -1.62; grind 306 7.8 -1.70; grind 307 8.4 -1.58
+click; turn -1; click
+turn 3; click; shot weight-history
+
+[weight chart]
+weight 0; wait 2000; weight 396.1; wait 1500
+weight 400; wait 1000; weight 405; wait 1000; weight 410; wait 1000; weight 413.6; wait 3000
+click; turn -1; click; turn 2; click; shot weight-chart-grind
+
+[comet blaster]
+click; turn -2; click; turn 1; click
+wait 500; shot comet-blaster-ready
+wait 3000; turn -3; wait 2000; weight 40; wait 300; shot comet-blaster
+weight 0; click; wait 100; shot comet-blaster-paused
+
+[curve tracer]
+click; turn -2; click; turn 2; click
+wait 500; shot curve-tracer-ready
+wait 3000; weight 30; wait 1500; weight 50; wait 1000; shot curve-tracer
+
+[doom]
+click; turn -2; click; turn 3; click
+wait 300; shot doom-intro
+wait 2500; shot doom-start
+weight 50; wait 1500; weight 0; turn 3; wait 600; shot doom-walk
+hold 1000; wait 100; shot doom-pause
+turn 1; click; wait 100; shot doom-map
+
+[doom fire]
+click; turn -2; click; turn 3; click
+wait 2800; turn 28; wait 600; press; wait 30; shot doom-fire
