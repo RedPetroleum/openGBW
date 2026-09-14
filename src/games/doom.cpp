@@ -1,6 +1,6 @@
-#include "game_common.hpp"
+#include "common.hpp"
 #include "rotary.hpp"
-#include "game_doom_data.hpp"
+#include "doom_data.hpp"
 
 // Doom Nano: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom.
 // Pressing the scale walks forward, the knob turns, a click fires, pulling the scale up reloads and

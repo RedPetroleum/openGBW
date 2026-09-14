@@ -1,4 +1,4 @@
-#include "game_common.hpp"
+#include "common.hpp"
 
 // Comet Blaster: score points for surviving and destroying comets flying in from the right.
 // The knob moves the ship, pressing the scale fires the laser.

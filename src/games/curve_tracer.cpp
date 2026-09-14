@@ -1,4 +1,4 @@
-#include "game_common.hpp"
+#include "common.hpp"
 
 // Curve Tracer: a line scrolls in from the right and has to be followed with the pressure on the scale.
 // More pressure moves the pen up. Staying on the line scores points, leaving it drains the grip bar.

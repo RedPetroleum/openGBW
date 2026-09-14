@@ -1,7 +1,7 @@
 #include "config.hpp"
 #include "display.hpp"
-#include "game.hpp"
-#include "game_common.hpp"
+#include "games.hpp"
+#include "common.hpp"
 
 // Add new games here, they appear in the Games submenu in this order
 static const GameDefinition games[] = {

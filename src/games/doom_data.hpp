@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-// Sprites, font and level of Doom Nano, only included by game_doom.cpp
+// Sprites, font and level of Doom Nano, only included by doom.cpp
 //
 // Taken from doom-nano by daveruiz (https://github.com/daveruiz/doom-nano, commit 2346404) with unchanged data:
 // the AVR specific PROGMEM storage removed, the font and level macros renamed.

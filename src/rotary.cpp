@@ -1,7 +1,7 @@
 #include "config.hpp"
 #include "rotary.hpp"
 #include "display.hpp"
-#include "game.hpp"
+#include "games.hpp"
 
 // Rotary encoder for user input
 AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(
