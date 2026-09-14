@@ -39,7 +39,7 @@ Changes on top of the version this is based on (see [Origin](#origin)):
 
 **Starting the grinder:** the grinder is started by the switch at the top, below the coffee outlet, which carries a 12V signal. The ESP32 is wired in parallel to this switch: it drives a transistor from GPIO 25 through a small resistor, and the transistor switches the 12V signal just like the switch does. No relay is needed.
 
-**Connection to base:** all electronics sit in the 3D printed base. For the three wires to the MCI (plus, minus and signal) I drilled a small hole in the bottom of the MCI.
+**Connection to base:** all electronics sit in the 3D printed base. For the three wires to the MCI (power, ground and signal) I drilled a small hole in the bottom of the MCI.
 
 *Opening the grinder and working on its electronics is at your own risk.*
 
