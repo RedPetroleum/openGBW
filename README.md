@@ -88,7 +88,7 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 | Exit | back to the main screen |
 | Cup Weight 1 / Cup Weight 2 | place the empty cup and press to save its weight, turn to leave without saving |
 | Scale Factor | turn to change the calibration factor while watching the live weight, press to save |
-| Offset | how early the grinder stops before the target weight; adjusted automatically after each grind |
+| Offset | how early the grinder stops before the target weight, between 0 and -10g; after every grind 70% of the deviation is corrected automatically, so it settles on the right value within a few grinds |
 | Scale Mode | GBW (default) or scale only (no grinder control, timer starts when the weight increases) |
 | Grinding Mode | continuous (relay stays closed while grinding) or impulse (short pulse to start and stop) |
 | Info Menu | cup weights, offset, scale factor and shot count |

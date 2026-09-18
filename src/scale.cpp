@@ -201,10 +201,10 @@ void scaleStatusLoop(void *p) {
                            (weightHistory.isSteady(STEADY_READINGS, STEADY_TOLERANCE) ||
                             millis() - finishedGrindingAt > FINISHED_MAX_WAIT)) {
                     double usedOffset = offset;
-                    offset += setWeight + cupWeightEmpty - currentWeight;
-                    if (ABS(offset) >= setWeight) {
-                        offset = COFFEE_DOSE_OFFSET;
-                    }
+                    // Correct only a part of the deviation: the offset adds up over the grinds, so it still
+                    // reaches the right value, but a single bad reading does not swing it around
+                    offset += OFFSET_CORRECTION * (setWeight + cupWeightEmpty - currentWeight);
+                    offset = constrain(offset, OFFSET_MIN, OFFSET_MAX);
                     shotCount++;
                     addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0, usedOffset,
                                    setWeight, currentWeight - cupWeightEmpty);
@@ -244,7 +244,7 @@ void setupScale() {
     preferences.begin("scale", false);
     scaleFactor = preferences.getDouble("calibration", (double)LOADCELL_SCALE_FACTOR);
     setWeight = preferences.getDouble("setWeight", (double)COFFEE_DOSE_WEIGHT);
-    offset = preferences.getDouble("offset", (double)COFFEE_DOSE_OFFSET);
+    offset = constrain(preferences.getDouble("offset", (double)COFFEE_DOSE_OFFSET), OFFSET_MIN, OFFSET_MAX);
     setCupWeight = preferences.getDouble("cup", (double)CUP_WEIGHT);
     setCupWeight2 = preferences.getDouble("cup2", (double)CUP_WEIGHT_2);
     scaleMode = preferences.getBool("scaleMode", false);

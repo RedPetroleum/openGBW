@@ -384,10 +384,7 @@ void rotary_loop()
             { // Offset menu
                 offset += ((float)newValue - (float)encoderValue) * encoderDir / 100;
                 encoderValue = newValue;
-                if (abs(offset) >= setWeight)
-                {
-                    offset = setWeight; // Prevent nonsensical offsets
-                }
+                offset = constrain(offset, OFFSET_MIN, OFFSET_MAX); // Prevent nonsensical offsets
             }
             else if (currentSetting == 10)
             { // Scale factor menu, applied immediately so the live weight can be checked

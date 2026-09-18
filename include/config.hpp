@@ -81,6 +81,10 @@ extern bool debugMode;
 #define MAX_PLAUSIBLE_WEIGHT_JUMP 3 // larger jumps between two readings are treated as spikes when stopping the grinder
 #define COFFEE_DOSE_WEIGHT 17.5 //war 18
 #define COFFEE_DOSE_OFFSET -1.67 //war -2.5
+#define OFFSET_CORRECTION 0.7 // share of the last deviation that is corrected into the offset; the offset
+                              // adds up, so a smaller share only settles slower, it does not leave an error
+#define OFFSET_MIN -10.0 // the offset only ever stops the grinder earlier, so it stays between these grams
+#define OFFSET_MAX 0.0
 #define MAX_GRINDING_TIME 60000 // 60 seconds (war 40, davor 20)
 #define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
 #define NO_PROGRESS_START_DELAY 10000 // "no progress" abort is only checked this long (ms) after grinding started
