@@ -43,7 +43,7 @@ Commands are separated by new lines or `;`, `#` starts a comment. A line `[name]
 | `press`, `release` | presses or releases the button without time passing, for frame exact input |
 | `weight <grams>` | reading of the scale |
 | `set <variable> <value>` | sets a firmware variable: `scaleStatus`, `currentSetting`, `currentMenuItem`, `setWeight`, `offset`, `cupWeightEmpty`, `setCupWeight`, `setCupWeight2`, `scaleFactor`, `shotCount`, `sleepTime`, `scaleReady`, `scaleMode`, `grindMode`, `debugMode`, `grindFailReason`, `grindTime` (seconds since grinding started) |
-| `grind <shot> <seconds> <offset>` | adds a grind to the Weight History |
+| `grind <shot> <seconds> <offset> <target> <actual>` | adds a grind to the Weight History |
 | `draw` | one more display update without time passing |
 | `shot <name>` | saves the display as `<name>.png` |
 

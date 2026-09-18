@@ -32,9 +32,19 @@ struct GrindRecord
     uint32_t shot;   // shot count after this grind
     float duration;  // grinding time in seconds
     float offset;    // offset used for this grind in grams
+    float target;    // target weight of this grind in grams
+    float actual;    // weight actually ground in grams, without the cup
 };
 #define GRIND_HISTORY_SIZE 10 // number of grinds kept in the Weight History
 #define GRIND_HISTORY_ROWS 5  // number of grinds visible at once in the Weight History
+#define GRIND_HISTORY_SETTING 13 // currentSetting while the Weight History is shown
+#define GRIND_HISTORY_PAGES 2 // column pages of the Weight History: time/offset and target/actual/difference
+
+// The Weight History is too wide for the display, so the scale itself turns the pages:
+// pressing it down shows the next page, pulling it up goes back
+#define HISTORY_PAGE_PRESS 200 // grams of press or pull that turn a page
+#define HISTORY_PAGE_RELEASE 50 // the scale has to come back within this many grams before the next page turn
+#define HISTORY_BASELINE_FOLLOW 4.0f // how fast the zero point follows scale drift while it is not pressed (1/s)
 
 // Debug mode toggle
 #define DEBUG_MODE true;
@@ -122,4 +132,5 @@ extern int currentDebugMenuItem;
 extern MathBuffer<double, 100> weightHistory;
 extern GrindRecord grindHistory[GRIND_HISTORY_SIZE];
 extern int grindHistoryCount;
-extern int grindHistoryScroll; 
+extern int grindHistoryScroll;
+extern int grindHistoryPage; 

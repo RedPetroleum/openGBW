@@ -71,7 +71,7 @@ TaskHandle_t ScaleTask = nullptr;
 TaskHandle_t ScaleStatusTask = nullptr;
 volatile bool displayLock = false;
 
-void addGrindRecord(uint32_t shot, float duration, float usedOffset); // scale.cpp
+void addGrindRecord(uint32_t shot, float duration, float usedOffset, float target, float actual); // scale.cpp
 
 // ---------------------------------------------------------------------------------------------------------------
 // PNG output
@@ -316,11 +316,12 @@ static bool execute(const std::vector<std::string> &words, int line)
   }
   else if (command == "grind")
   {
-    // grind <shot> <seconds> <offset>: adds an entry to the Weight History
-    double shot, duration, grindOffset;
-    if (words.size() != 4 || !parseNumber(words[1], shot) || !parseNumber(words[2], duration) || !parseNumber(words[3], grindOffset))
-      return fail(line, "usage: grind <shot> <seconds> <offset>");
-    addGrindRecord(shot, duration, grindOffset);
+    // grind <shot> <seconds> <offset> <target> <actual>: adds an entry to the Weight History
+    double shot, duration, grindOffset, target, actual;
+    if (words.size() != 6 || !parseNumber(words[1], shot) || !parseNumber(words[2], duration) ||
+        !parseNumber(words[3], grindOffset) || !parseNumber(words[4], target) || !parseNumber(words[5], actual))
+      return fail(line, "usage: grind <shot> <seconds> <offset> <target> <actual>");
+    addGrindRecord(shot, duration, grindOffset, target, actual);
   }
   else if (command == "draw")
   {

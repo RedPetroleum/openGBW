@@ -53,9 +53,9 @@ void updateScale(void *parameter) {
             tareScale();
         }
         if (loadcell.wait_ready_timeout(300)) {
-            // The game needs the laser to react quickly when the scale is pressed:
-            // single readings without the (lagging) Kalman estimate while playing
-            bool fastReadings = scaleStatus == STATUS_GAME;
+            // The game needs the laser to react quickly when the scale is pressed, and so does
+            // paging through the Weight History: single readings without the (lagging) Kalman estimate
+            bool fastReadings = scaleStatus == STATUS_GAME || currentSetting == GRIND_HISTORY_SETTING;
             float reading = loadcell.get_units(fastReadings ? 1 : 5);
             lastEstimate = kalmanFilter.updateEstimate(reading);
             previousScaleWeight = scaleWeight;
@@ -85,11 +85,11 @@ void grinderToggle() {
 }
 
 // Adds a finished grind to the history (newest first); caller saves it to preferences
-void addGrindRecord(uint32_t shot, float duration, float usedOffset) {
+void addGrindRecord(uint32_t shot, float duration, float usedOffset, float target, float actual) {
     for (int i = GRIND_HISTORY_SIZE - 1; i > 0; i--) {
         grindHistory[i] = grindHistory[i - 1];
     }
-    grindHistory[0] = {shot, duration, usedOffset};
+    grindHistory[0] = {shot, duration, usedOffset, target, actual};
     if (grindHistoryCount < GRIND_HISTORY_SIZE) {
         grindHistoryCount++;
     }
@@ -206,7 +206,8 @@ void scaleStatusLoop(void *p) {
                         offset = COFFEE_DOSE_OFFSET;
                     }
                     shotCount++;
-                    addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0, usedOffset);
+                    addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0, usedOffset,
+                                   setWeight, currentWeight - cupWeightEmpty);
                     preferences.begin("scale", false);
                     preferences.putDouble("offset", offset);
                     preferences.putUInt("shotCount", shotCount);

@@ -26,9 +26,11 @@ click; turn 1; click; shot games-menu
 click; turn 1; click; shot debug-menu
 
 [debug menu]
-grind 305 8.1 -1.62; grind 306 7.8 -1.70; grind 307 8.4 -1.58
+grind 305 8.1 -1.62 17.5 17.4; grind 306 7.8 -1.70 17.5 17.8; grind 307 8.4 -1.58 17.5 17.5
 click; turn -1; click
 turn 3; click; shot weight-history
+weight 300; wait 200; shot weight-history-weights # pressing the scale shows the next columns
+weight 0; wait 200; weight -300; wait 200; shot weight-history # pulling it up goes back
 
 [weight chart]
 weight 0; wait 2000; weight 396.1; wait 1500

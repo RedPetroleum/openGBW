@@ -103,7 +103,7 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 |---|---|
 | Sim Grind | simulates a grind without the grinder |
 | Weight Chart | graph of the last 100 scale readings |
-| Weight History | shot number, grinding time and used offset of the last 10 grinds (kept after power off), turn to scroll |
+| Weight History | the last 10 grinds (kept after power off), turn to scroll: shot number, grinding time and used offset, press the scale for target weight, actual weight and their difference, pull it up to go back |
 | Zero Shot Count | resets the shot counter to 0 |
 
 #### Games
@@ -121,7 +121,7 @@ All games use the scale as a pressure sensor: remove the cup and press on the sc
 - **Doom**: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom. Press the scale to walk forward and pull it up gently to walk backward (the harder, the faster), turn the knob to look around and click to fire. Dead enemies drop ammo. Doors open when you walk into them, locked doors need a key. The pause menu has a map of the explored level. Find the exit, the fastest time is saved.
 
   <img src="screenshots/doom-fire.png" alt="Doom" width="256">
-  
+
 ------------
 ### To-Do
 
@@ -131,3 +131,6 @@ All games use the scale as a pressure sensor: remove the cup and press on the sc
 - Debug-Option: Disable Grinding (Show Dot or something instead)
 - Better grinding Screen with graph or loading screen or something. 
 - Game: Death Star: https://drive.google.com/drive/folders/19_JMvg4HcsPCw0QcT5VSEuF0uNpCn1_V
+- Game: Pong
+- Game: Tiny Wings
+- faster progression in line game

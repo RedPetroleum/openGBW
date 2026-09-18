@@ -89,6 +89,10 @@ MenuItem menuItems[12] = {
 int debugMenuItemsCount = 5; // Number of items in the Debug Menu
 int currentDebugMenuItem = 0; // Current selection in the Debug Menu
 int grindHistoryScroll = 0;   // First visible entry in the Weight History
+int grindHistoryPage = 0;     // Visible column page of the Weight History
+static double historyBaseline = 0;   // Reading of the scale that counts as "not pressed"
+static bool historyPageArmed = true; // False until the scale has been released after a page turn
+static unsigned long historyInputAt = 0; // Time of the last page navigation update
 MenuItem debugMenuItems[5] = {
     {0, false, "Exit", 0},
     {1, false, "Sim Grind", 0},
@@ -348,28 +352,76 @@ void showWeightChart()
   screen.sendBuffer();
 }
 
-// Function to display duration and offset of the last grinds (newest first, turn to scroll)
+// Starts the Weight History at its first page and takes the current reading as the zero point
+void resetGrindHistoryInput()
+{
+  grindHistoryScroll = 0;
+  grindHistoryPage = 0;
+  historyBaseline = scaleWeight;
+  historyPageArmed = true;
+  historyInputAt = millis();
+}
+
+// Pressing the scale down turns to the next column page of the Weight History, pulling it up turns back.
+// While it is not pressed the zero point follows the reading, so a cup standing on the scale is no problem.
+static void grindHistoryScaleInput()
+{
+  unsigned long now = millis();
+  float dt = min((now - historyInputAt) / 1000.0f, 0.1f);
+  historyInputAt = now;
+
+  double pressed = scaleWeight - historyBaseline;
+  if (abs(pressed) < HISTORY_PAGE_RELEASE)
+  {
+    historyBaseline += pressed * min(1.0f, dt * HISTORY_BASELINE_FOLLOW);
+    historyPageArmed = true; // the scale is free again, the next press turns a page
+    return;
+  }
+  if (!historyPageArmed)
+    return;
+  if (pressed > HISTORY_PAGE_PRESS && grindHistoryPage < GRIND_HISTORY_PAGES - 1)
+  {
+    grindHistoryPage++;
+    historyPageArmed = false;
+  }
+  else if (pressed < -HISTORY_PAGE_PRESS && grindHistoryPage > 0)
+  {
+    grindHistoryPage--;
+    historyPageArmed = false;
+  }
+}
+
+// Function to display the last grinds (newest first, turn to scroll, press the scale for the next page).
+// The header names the columns of the current page: time and offset, or target, actual weight and difference.
 void showGrindHistory()
 {
   char buf[32];
+  grindHistoryScaleInput();
   screen.clearBuffer();
   screen.setFontPosTop();
   screen.setFont(u8g2_font_6x10_tr);
-  CenterPrintToScreen("Weight History", 0);
   if (grindHistoryCount == 0)
   {
+    CenterPrintToScreen("Weight History", 0);
     CenterPrintToScreen("No grinds yet", 30);
     screen.sendBuffer();
     return;
   }
+  LeftPrintToScreen("Shot", 0);
+  // Same widths as the values below, so the header sits above its columns
+  RightPrintToScreen(grindHistoryPage == 0 ? "Time  Offset" : "Targ  Act Diff", 0);
   for (int row = 0; row < GRIND_HISTORY_ROWS; row++)
   {
     int index = grindHistoryScroll + row;
     if (index >= grindHistoryCount)
       break;
-    snprintf(buf, sizeof(buf), "#%lu", (unsigned long)grindHistory[index].shot);
+    GrindRecord &record = grindHistory[index];
+    snprintf(buf, sizeof(buf), "#%lu", (unsigned long)record.shot);
     LeftPrintToScreen(buf, 12 + row * 10);
-    snprintf(buf, sizeof(buf), "%.1fs %6.2fg", grindHistory[index].duration, grindHistory[index].offset);
+    if (grindHistoryPage == 0)
+      snprintf(buf, sizeof(buf), "%.1fs %6.2fg", record.duration, record.offset);
+    else
+      snprintf(buf, sizeof(buf), "%4.1f %4.1f %+4.1f", record.target, record.actual, record.actual - record.target);
     RightPrintToScreen(buf, 12 + row * 10);
   }
   screen.sendBuffer();
@@ -488,7 +540,7 @@ void showSetting()
   {
     showWeightChart();
   }
-  else if (currentSetting == 13)
+  else if (currentSetting == GRIND_HISTORY_SETTING)
   {
     showGrindHistory();
   }
@@ -525,10 +577,10 @@ void handleDebugMenuAction()
         currentSetting = 12; // Graph is drawn by the display task, click returns to the Debug Menu
         return;
 
-    case 3: // Show Weight History (duration and offset of the last grinds)
+    case 3: // Show Weight History (time, offset, target and actual weight of the last grinds)
         Serial.println("Displaying Weight History...");
-        grindHistoryScroll = 0;
-        currentSetting = 13; // Drawn by the display task, turn to scroll, click returns to the Debug Menu
+        resetGrindHistoryInput();
+        currentSetting = GRIND_HISTORY_SETTING; // Drawn by the display task, turn to scroll, press the scale to page, click returns
         return;
 
     case 4: // Reset Shot Count

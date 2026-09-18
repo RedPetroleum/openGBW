@@ -307,7 +307,7 @@ void rotary_onButtonClick()
             break;
         }
         case 12: // Weight Chart view
-        case 13: // Weight History view
+        case GRIND_HISTORY_SETTING: // Weight History view
         {
             currentSetting = 9; // Back to the Debug Menu
             break;
@@ -374,7 +374,7 @@ void rotary_loop()
                 gamesMenuOnTurn((newValue - encoderValue) * -encoderDir);
                 encoderValue = newValue;
             }
-            else if (currentSetting == 13)
+            else if (currentSetting == GRIND_HISTORY_SETTING)
             { // Weight History: scroll through the recorded grinds
                 grindHistoryScroll += (newValue - encoderValue) * -encoderDir;
                 encoderValue = newValue;
