@@ -133,4 +133,3 @@ All games use the scale as a pressure sensor: remove the cup and press on the sc
 - Game: Death Star: https://drive.google.com/drive/folders/19_JMvg4HcsPCw0QcT5VSEuF0uNpCn1_V
 - Game: Pong
 - Game: Tiny Wings
-- faster progression in line game
