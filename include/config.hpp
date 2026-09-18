@@ -42,8 +42,8 @@ struct GrindRecord
 
 // The Weight History is too wide for the display, so the scale itself turns the pages:
 // pressing it down shows the next page, pulling it up goes back
-#define HISTORY_PAGE_PRESS 200 // grams of press or pull that turn a page
-#define HISTORY_PAGE_RELEASE 50 // the scale has to come back within this many grams before the next page turn
+#define HISTORY_PAGE_PRESS 50 // grams of press or pull that turn a page, a light touch is enough
+#define HISTORY_PAGE_RELEASE 12 // the scale has to come back within this many grams before the next page turn
 #define HISTORY_BASELINE_FOLLOW 4.0f // how fast the zero point follows scale drift while it is not pressed (1/s)
 
 // Debug mode toggle
@@ -98,6 +98,10 @@ extern bool debugMode;
 #define TARE_MAX_WEIGHT 30 // readings up to this many grams are tared away automatically
 #define TARE_STEADY_TOLERANCE 0.5 // ... but only when the reading has been this steady for the last 10 seconds,
                                   // so nothing is tared away while a cup is being placed on the scale
+#define TARE_MAX_SPREAD 2.0 // a tare whose readings are further apart than this many grams is discarded:
+                            // something was put on the scale while taring, and half of it would become the new zero.
+                            // Generous on purpose: a cup spreads the readings by tens of grams, while a noisy
+                            // load cell must not have every tare rejected
 
 #define ROTARY_ENCODER_A_PIN 32
 #define ROTARY_ENCODER_B_PIN 23

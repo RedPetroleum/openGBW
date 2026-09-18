@@ -27,6 +27,7 @@ unsigned long scaleLastUpdatedAt = 0;  // Timestamp of the last scale update
 unsigned long lastActivityAt = 0; // Timestamp of the last scale change or knob use (display sleep timer)
 unsigned long lastTareAt = 0; // Timestamp of the last tare operation
 bool scaleReady = false;      // Indicates if the scale is ready to measure
+bool scaleTared = false;      // True once a tare has succeeded, until then taring is retried immediately
 int scaleStatus = STATUS_EMPTY; // Current status of the scale
 double cupWeightEmpty = 0;    // Measured weight of the empty cup
 unsigned long startedGrindingAt = 0;  // Timestamp of when grinding started
@@ -35,10 +36,39 @@ bool greset = false;          // Flag for reset operation
 bool newOffset = false;       // Indicates if a new offset value is pending
 const char *grindFailReason = ""; // Why the last grind was aborted, shown on the display
 
-// Tares the scale (sets the current weight to zero)
+// Tares the scale (sets the current weight to zero). The readings are taken one by one instead of
+// through loadcell.tare(), so that a weight arriving while taring can be noticed: taring takes about
+// two seconds, and a cup placed during them would end up in the new zero point with a part of its weight.
 void tareScale() {
     Serial.println("Taring scale");
-    loadcell.tare(TARE_MEASURES);
+    long sum = 0, lowest = 0, highest = 0;
+    for (int measure = 0; measure < TARE_MEASURES; measure++) {
+        if (!loadcell.wait_ready_timeout(300)) {
+            Serial.println("Tare aborted, scale does not answer");
+            return; // lastTareAt stays untouched, so this is tried again right away
+        }
+        long reading = loadcell.read();
+        sum += reading;
+        if (measure == 0 || reading < lowest) {
+            lowest = reading;
+        }
+        if (measure == 0 || reading > highest) {
+            highest = reading;
+        }
+        delay(0); // feeds the watchdog on the ESP32
+    }
+
+    double spread = ABS((highest - lowest) / scaleFactor);
+    if (spread > TARE_MAX_SPREAD) {
+        Serial.printf("Tare discarded, the readings are %.1fg apart\n", spread);
+        // Once the scale has a zero point, the next quiet moment is awaited instead of taring right away,
+        // which would zero away whatever was just placed on the scale
+        lastTareAt = scaleTared ? millis() : 0;
+        return;
+    }
+
+    loadcell.set_offset(sum / TARE_MEASURES);
+    scaleTared = true;
     lastTareAt = millis();
 }
 

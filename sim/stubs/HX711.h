@@ -7,6 +7,8 @@ public:
   void begin(int, int) {}
   void set_scale(float) {}
   void tare(int = 10) {}
+  long read() { return 0; }
+  void set_offset(long) {}
   bool wait_ready_timeout(unsigned long = 1000) { return true; }
   float get_units(int = 1) { return 0; }
 };
