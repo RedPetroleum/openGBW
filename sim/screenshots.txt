@@ -6,6 +6,7 @@ shot main
 
 [grinding]
 set cupWeightEmpty 396.1; weight 405.3; set scaleStatus 1; set grindTime 4.2
+wait 600; set grindTime 4.2 # the progress bar follows the reading smoothly, give it time to catch up
 draw; shot grinding
 set scaleStatus 2; weight 413.6; set grindTime 7.9
 draw; shot grinding-finished

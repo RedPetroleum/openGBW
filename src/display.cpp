@@ -47,6 +47,11 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 // Narrow gap in pixels between a weight and its unit
 #define WEIGHT_UNIT_GAP 2
 
+// Progress bar of the grinding screen, filled towards the set weight
+#define GRIND_BAR_Y 39
+#define GRIND_BAR_HEIGHT 12
+#define GRIND_BAR_EASING 8.0f // how fast the drawn bar follows the reading (1/s), the scale only reports twice a second
+
 // Function to print a weight with its decimal point at WEIGHT_DECIMAL_X and a narrow gap before "g"
 // Requires a font where all digits have the same advance width
 void WeightPrintToScreen(double weight, u8g2_uint_t y)
@@ -608,6 +613,28 @@ void handleDebugMenuAction()
 }
 
 
+static float grindBarFill = 0;        // Fill of the progress bar as drawn, follows the reading smoothly
+static unsigned long grindBarDrawnAt = 0; // Time of the last progress bar update
+
+// Draws how much of the set weight is in the cup. The reading only arrives twice a second, so the bar
+// follows it smoothly instead of jumping. It never fills completely: the grinder stops before the set
+// weight and the dose counts as reached only once the reading has settled, which is the next screen.
+static void drawGrindProgress(float progress)
+{
+  unsigned long now = millis();
+  float dt = min((now - grindBarDrawnAt) / 1000.0f, 0.1f);
+  grindBarDrawnAt = now;
+  grindBarFill += (progress - grindBarFill) * min(1.0f, dt * GRIND_BAR_EASING);
+
+  screen.drawFrame(0, GRIND_BAR_Y, 128, GRIND_BAR_HEIGHT);
+  int inside = 128 - 2; // the fill sits directly against the frame, without a gap
+  int fill = constrain((int)(grindBarFill * inside), 0, inside - 1); // always one pixel short of full
+  if (fill > 0)
+  {
+    screen.drawBox(1, GRIND_BAR_Y + 1, fill, GRIND_BAR_HEIGHT - 2);
+  }
+}
+
 // Draws the current state once (also used by the display simulator in sim/)
 void refreshDisplay()
 {
@@ -649,19 +676,21 @@ void refreshDisplay()
 
       screen.setFontPosCenter();
       screen.setFont(u8g2_font_7x14B_tf);
-      screen.setCursor(3, 32);
+      screen.setCursor(3, 26);
       snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight - cupWeightEmpty);
       screen.print(buf);
 
       screen.setFontPosCenter();
       screen.setFont(u8g2_font_unifont_t_symbols);
-      screen.drawGlyph(64, 32, 0x2794);
+      screen.drawGlyph(64, 26, 0x2794);
 
       screen.setFontPosCenter();
       screen.setFont(u8g2_font_7x14B_tf);
-      screen.setCursor(84, 32);
+      screen.setCursor(84, 26);
       snprintf(buf, sizeof(buf), "%3.1fg", setWeight);
       screen.print(buf);
+
+      drawGrindProgress(setWeight > 0 ? (scaleWeight - cupWeightEmpty) / setWeight : 0);
 
       screen.setFontPosBottom();
       screen.setFont(u8g2_font_7x13_tr);
@@ -670,6 +699,8 @@ void refreshDisplay()
     }
     else if (scaleStatus == STATUS_EMPTY)
     {
+      grindBarFill = 0; // the next grind starts with an empty bar
+
       screen.setFontPosTop();
       screen.setFont(u8g2_font_7x13_tr);
       CenterPrintToScreen("Weight:", 0);
