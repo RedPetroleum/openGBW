@@ -122,7 +122,9 @@ void scaleStatusLoop(void *p) {
 
         switch (scaleStatus) {
             case STATUS_EMPTY: {
-                if (millis() - lastTareAt > TARE_MIN_INTERVAL && ABS(tenSecAvg) > 0.2 && tenSecAvg < 3 && scaleWeight < 3) {
+                // Anything resting on the scale up to TARE_MAX_WEIGHT is tared away, however small it is
+                if (millis() - lastTareAt > TARE_MIN_INTERVAL && tenSecAvg < TARE_MAX_WEIGHT && scaleWeight < TARE_MAX_WEIGHT &&
+                    ABS(scaleWeight - tenSecAvg) < TARE_STEADY_TOLERANCE) {
                     lastTareAt = 0; // Retare if conditions are met
                 }
                 if (isCupDetected(setCupWeight) || isCupDetected(setCupWeight2)) {

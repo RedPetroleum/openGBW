@@ -75,7 +75,10 @@ extern bool debugMode;
 
 #define GRINDER_ACTIVE_PIN 25 // war 33
 
-#define TARE_MIN_INTERVAL 5 * 1000 // auto-tare at most once every 10 seconds
+#define TARE_MIN_INTERVAL 5 * 1000 // auto-tare at most once every 5 seconds
+#define TARE_MAX_WEIGHT 30 // readings up to this many grams are tared away automatically
+#define TARE_STEADY_TOLERANCE 0.5 // ... but only when the reading has been this steady for the last 10 seconds,
+                                  // so nothing is tared away while a cup is being placed on the scale
 
 #define ROTARY_ENCODER_A_PIN 32
 #define ROTARY_ENCODER_B_PIN 23
