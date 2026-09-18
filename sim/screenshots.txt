@@ -44,6 +44,11 @@ weight 0; wait 2000; weight 396.1; wait 1500
 weight 400; wait 1000; weight 405; wait 1000; weight 410; wait 1000; weight 413.6; wait 3000
 click; turn -1; click; turn 2; click; shot weight-chart-grind
 
+[weight chart of a quiet scale]
+click; turn -1; click; turn 2; click
+weight 0.02; wait 900; weight -0.03; wait 900; weight 0.05; wait 900; weight 0.01; wait 900
+weight 0.04; wait 900; weight -0.01; wait 900; weight 0.03; wait 2000; shot weight-chart-quiet
+
 [comet blaster]
 click; turn -2; click; turn 1; click
 wait 500; shot comet-blaster-ready

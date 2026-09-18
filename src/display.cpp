@@ -326,12 +326,12 @@ void showCupWeightSetScreen(double cupWeight)
 // Function to display the recorded weights as a line graph (newest reading on the right)
 void showWeightChart()
 {
-  double values[100];
+  double values[WEIGHT_HISTORY_SIZE];
   int count = 0;
   int64_t oldestTimestamp = millis();
   // Samples are delivered from newest to oldest
   weightHistory.executeOnSamplesSince(0, [&](double value, int64_t ms) {
-    if (count < 100)
+    if (count < WEIGHT_HISTORY_SIZE)
     {
       values[count++] = value;
       oldestTimestamp = ms;
@@ -355,23 +355,27 @@ void showWeightChart()
     minValue = min(minValue, values[i]);
     maxValue = max(maxValue, values[i]);
   }
-  double range = max(maxValue - minValue, 1.0); // At least 1g so noise is not blown up
+  // At least 0.2g, so a quiet scale does not have its last digit blown up over the whole height
+  double range = max(maxValue - minValue, 0.2);
+  double bottomValue = (minValue + maxValue) / 2 - range / 2; // the readings sit in the middle of the graph
 
   char buf[32];
-  snprintf(buf, sizeof(buf), "%.1f - %.1fg", minValue, maxValue);
-  LeftPrintToScreen(buf, 0);
-  snprintf(buf, sizeof(buf), "%lus", (unsigned long)((millis() - oldestTimestamp) / 1000));
-  RightPrintToScreen(buf, 0); // Time span covered by the graph
+  snprintf(buf, sizeof(buf), "%.2fg", scaleWeight);
+  LeftPrintToScreen(buf, 0); // Current weight, two decimals to judge how quiet the scale is
+  // How much the graph covers: grams over its full height and seconds over its full width
+  unsigned long seconds = (millis() - oldestTimestamp) / 1000;
+  // Two decimals while the graph is zoomed into the noise, whole grams for a grind
+  snprintf(buf, sizeof(buf), range < 10 ? "%.2fg %lus" : "%.0fg %lus", range, seconds);
+  RightPrintToScreen(buf, 0);
 
+  // One pixel column per reading, newest on the right and nothing in between: the readings are not
+  // stretched over the width, so neighbouring columns are neighbouring measurements
   const int graphTop = 9;
   const int graphBottom = 63;
-  for (int i = 0; i < count - 1; i++)
+  for (int i = 0; i < count; i++)
   {
-    int x1 = 127 - i * 127 / (count - 1);
-    int x2 = 127 - (i + 1) * 127 / (count - 1);
-    int y1 = graphBottom - (values[i] - minValue) / range * (graphBottom - graphTop);
-    int y2 = graphBottom - (values[i + 1] - minValue) / range * (graphBottom - graphTop);
-    screen.drawLine(x1, y1, x2, y2);
+    int y = graphBottom - (values[i] - bottomValue) / range * (graphBottom - graphTop);
+    screen.drawPixel(127 - i, y);
   }
   screen.sendBuffer();
 }
@@ -560,7 +564,7 @@ void showSetting()
   {
     showScaleFactorMenu();
   }
-  else if (currentSetting == 12)
+  else if (currentSetting == WEIGHT_CHART_SETTING)
   {
     showWeightChart();
   }
@@ -598,7 +602,7 @@ void handleDebugMenuAction()
 
     case 2: // Show Weight Chart
         Serial.println("Displaying Weight Chart...");
-        currentSetting = 12; // Graph is drawn by the display task, click returns to the Debug Menu
+        currentSetting = WEIGHT_CHART_SETTING; // Graph is drawn by the display task, click returns to the Debug Menu
         return;
 
     case 3: // Show Weight History (time, offset, target and actual weight of the last grinds)

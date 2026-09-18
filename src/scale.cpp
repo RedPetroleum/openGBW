@@ -16,7 +16,7 @@ bool grinderActive = false;   // Grinder state (on/off)
 unsigned int shotCount;  
 
 // Buffer for storing recent weight history
-MathBuffer<double, 100> weightHistory;
+MathBuffer<double, WEIGHT_HISTORY_SIZE> weightHistory;
 
 // Last finished grinds, newest first
 GrindRecord grindHistory[GRIND_HISTORY_SIZE];
@@ -83,9 +83,11 @@ void updateScale(void *parameter) {
             tareScale();
         }
         if (loadcell.wait_ready_timeout(300)) {
-            // The game needs the laser to react quickly when the scale is pressed, and so does
-            // paging through the Weight History: single readings without the (lagging) Kalman estimate
-            bool fastReadings = scaleStatus == STATUS_GAME || currentSetting == GRIND_HISTORY_SETTING;
+            // Single readings without the (lagging) Kalman estimate: the game needs the laser to react
+            // quickly when the scale is pressed, paging through the Weight History the same, and the
+            // Weight Chart shows what the load cell really delivers
+            bool fastReadings = scaleStatus == STATUS_GAME || currentSetting == GRIND_HISTORY_SETTING ||
+                                currentSetting == WEIGHT_CHART_SETTING;
             float reading = loadcell.get_units(fastReadings ? 1 : 5);
             lastEstimate = kalmanFilter.updateEstimate(reading);
             previousScaleWeight = scaleWeight;
