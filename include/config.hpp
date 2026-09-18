@@ -57,6 +57,7 @@ extern bool debugMode;
 #define STATUS_EMPTY 0
 #define STATUS_GRINDING_IN_PROGRESS 1
 #define STATUS_GRINDING_FINISHED 2
+#define STATUS_GRINDING_VERIFYING 6 // grinder already off, waiting for the reading to settle
 #define STATUS_GRINDING_FAILED 3
 #define STATUS_IN_MENU 4
 #define STATUS_IN_SUBMENU 5

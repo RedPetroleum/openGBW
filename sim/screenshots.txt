@@ -12,6 +12,8 @@ shot main
 set cupWeightEmpty 396.1; weight 405.3; set scaleStatus 1; set grindTime 4.2
 wait 600; set grindTime 4.2 # the progress bar follows the reading smoothly, give it time to catch up
 draw; shot grinding
+set scaleStatus 6; weight 412.5; set grindTime 7.9
+wait 600; set grindTime 7.9; draw; shot verifying # grinder off, waiting for a steady reading
 set scaleStatus 2; weight 413.6; set grindTime 7.9
 draw; shot grinding-finished
 set scaleStatus 3; set grindFailReason Cup removed

@@ -210,41 +210,54 @@ void scaleStatusLoop(void *p) {
                 if (scaleWeight >= targetWeight &&
                     (scaleWeight - previousScaleWeight < MAX_PLAUSIBLE_WEIGHT_JUMP || previousScaleWeight >= targetWeight)) {
                     finishedGrindingAt = millis();
-                    grinderToggle();
-                    scaleStatus = STATUS_GRINDING_FINISHED;
+                    grinderToggle(); // the grinder stops here, the dose is only confirmed in the next state
+                    scaleStatus = STATUS_GRINDING_VERIFYING;
                     continue;
                 }
                 break;
             }
-            case STATUS_GRINDING_FINISHED: {
+            case STATUS_GRINDING_VERIFYING: {
+                // The grinder is off, the last grounds are still landing. Keep the display awake until
+                // the dose is confirmed, otherwise the sleep timer would leave this state
+                lastActivityAt = millis();
                 // Window of 1s so it always contains readings (an empty window would average to 0)
                 double currentWeight = weightHistory.averageSince((int64_t)millis() - 1000);
                 if (scaleWeight < 5) {
                     startedGrindingAt = 0;
+                    scaleStatus = STATUS_EMPTY; // the cup was taken before the dose could be confirmed
+                    continue;
+                }
+                // The dose counts as reached once the reading has settled; after FINISHED_MAX_WAIT it is
+                // taken anyway, so a restless scale still finishes the grind
+                if (millis() - finishedGrindingAt > FINISHED_MIN_WAIT &&
+                    (weightHistory.isSteady(STEADY_READINGS, STEADY_TOLERANCE) ||
+                     millis() - finishedGrindingAt > FINISHED_MAX_WAIT)) {
+                    if (newOffset) {
+                        double usedOffset = offset;
+                        // Correct only a part of the deviation: the offset adds up over the grinds, so it still
+                        // reaches the right value, but a single bad reading does not swing it around
+                        offset += OFFSET_CORRECTION * (setWeight + cupWeightEmpty - currentWeight);
+                        offset = constrain(offset, OFFSET_MIN, OFFSET_MAX);
+                        shotCount++;
+                        addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0, usedOffset,
+                                       setWeight, currentWeight - cupWeightEmpty);
+                        preferences.begin("scale", false);
+                        preferences.putDouble("offset", offset);
+                        preferences.putUInt("shotCount", shotCount);
+                        preferences.putBytes("grindHist", grindHistory, sizeof(grindHistory));
+                        preferences.putInt("grindHistN", grindHistoryCount);
+                        preferences.end();
+                        newOffset = false;
+                    }
+                    scaleStatus = STATUS_GRINDING_FINISHED;
+                }
+                break;
+            }
+            case STATUS_GRINDING_FINISHED: {
+                if (scaleWeight < 5) {
+                    startedGrindingAt = 0;
                     scaleStatus = STATUS_EMPTY;
                     continue;
-                // Measure the dose once the reading has settled, the last grounds take a moment
-                // to land; after FINISHED_MAX_WAIT it is measured anyway so a restless scale
-                // still updates the offset
-                } else if (currentWeight != setWeight + cupWeightEmpty && newOffset &&
-                           millis() - finishedGrindingAt > FINISHED_MIN_WAIT &&
-                           (weightHistory.isSteady(STEADY_READINGS, STEADY_TOLERANCE) ||
-                            millis() - finishedGrindingAt > FINISHED_MAX_WAIT)) {
-                    double usedOffset = offset;
-                    // Correct only a part of the deviation: the offset adds up over the grinds, so it still
-                    // reaches the right value, but a single bad reading does not swing it around
-                    offset += OFFSET_CORRECTION * (setWeight + cupWeightEmpty - currentWeight);
-                    offset = constrain(offset, OFFSET_MIN, OFFSET_MAX);
-                    shotCount++;
-                    addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0, usedOffset,
-                                   setWeight, currentWeight - cupWeightEmpty);
-                    preferences.begin("scale", false);
-                    preferences.putDouble("offset", offset);
-                    preferences.putUInt("shotCount", shotCount);
-                    preferences.putBytes("grindHist", grindHistory, sizeof(grindHistory));
-                    preferences.putInt("grindHistN", grindHistoryCount);
-                    preferences.end();
-                    newOffset = false;
                 }
                 break;
             }

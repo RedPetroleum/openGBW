@@ -75,7 +75,7 @@ The game **Doom** is based on [daveruiz/doom-nano](https://github.com/daveruiz/d
 
 #### Main screen
 
-Turn the knob to set the target weight. Place an empty dosing cup on the scale: as soon as it has rested on the scale for one second within 10g of one of the two saved cup weights, the grinder starts. After grinding the display shows the final weight and the grinding time. Remove the cup to get back to the main screen.
+Turn the knob to set the target weight. Place an empty dosing cup on the scale: as soon as it has rested on the scale for one second within 10g of one of the two saved cup weights, the grinder starts. The grinder stops as soon as the target weight is reached, the display then shows "Verifying" until the reading has settled and only afterwards the final weight and the grinding time. Remove the cup to get back to the main screen.
 
 <img src="screenshots/main.png" alt="Main screen with weight and target weight" width="256"> <img src="screenshots/grinding.png" alt="Display while grinding" width="256">
 

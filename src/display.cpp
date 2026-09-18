@@ -773,11 +773,14 @@ void refreshDisplay()
   }
   else
   {
-    if (scaleStatus == STATUS_GRINDING_IN_PROGRESS)
+    if (scaleStatus == STATUS_GRINDING_IN_PROGRESS || scaleStatus == STATUS_GRINDING_VERIFYING)
     {
+      // The grinder has already stopped while verifying, only the reading still has to settle
+      bool verifying = scaleStatus == STATUS_GRINDING_VERIFYING;
+
       screen.setFontPosTop();
       screen.setFont(u8g2_font_7x13_tr);
-      CenterPrintToScreen("Grinding...", 0);
+      CenterPrintToScreen(verifying ? "Verifying..." : "Grinding...", 0);
 
       screen.setFontPosCenter();
       screen.setFont(u8g2_font_7x14B_tf);
@@ -799,7 +802,10 @@ void refreshDisplay()
 
       screen.setFontPosBottom();
       screen.setFont(u8g2_font_7x13_tr);
-      snprintf(buf, sizeof(buf), "%3.1fs", startedGrindingAt > 0 ? (double)(millis() - startedGrindingAt) / 1000 : 0);
+      // While verifying the grinding time stands still, it is the time the grind took
+      double grindSeconds = verifying ? (double)(finishedGrindingAt - startedGrindingAt) / 1000
+                                      : (startedGrindingAt > 0 ? (double)(millis() - startedGrindingAt) / 1000 : 0);
+      snprintf(buf, sizeof(buf), "%3.1fs", grindSeconds);
       CenterPrintToScreen(buf, 64);
     }
     else if (scaleStatus == STATUS_EMPTY)
