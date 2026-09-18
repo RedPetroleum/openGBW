@@ -1,6 +1,10 @@
 # Screenshots of all screens, run with "make screenshots" in sim/
 # Every [section] starts from a freshly started firmware. Commands: see README.md
 
+[boot]
+boot 700; shot boot
+boot 1500; shot boot-turned # the cup turns while the bar fills
+
 [main screen]
 shot main
 

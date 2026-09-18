@@ -323,6 +323,19 @@ static bool execute(const std::vector<std::string> &words, int line)
       return fail(line, "usage: grind <shot> <seconds> <offset> <target> <actual>");
     addGrindRecord(shot, duration, grindOffset, target, actual);
   }
+  else if (command == "boot")
+  {
+    // boot <ms>: shows the boot screen for this long, the scale has not reported a reading yet
+    if (!numberArgument(1))
+      return fail(line, "usage: boot <ms>");
+    unsigned long until = simTime + (unsigned long)value;
+    while (simTime < until)
+    {
+      scaleLastUpdatedAt = 0;
+      step();
+    }
+    scaleLastUpdatedAt = simTime;
+  }
   else if (command == "draw")
   {
     refreshDisplay(); // one more display update without time passing

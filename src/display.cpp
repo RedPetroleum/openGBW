@@ -47,6 +47,25 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 // Narrow gap in pixels between a weight and its unit
 #define WEIGHT_UNIT_GAP 2
 
+// Boot screen: a wireframe espresso cup turning on its saucer while the scale tares
+#define BOOT_TURN_MS 5000       // time for one full turn of the cup
+#define BOOT_TILT 0.38f         // the cup is seen from slightly above, in radians
+#define BOOT_CAMERA 6.0f        // distance of the camera, gives the model its perspective
+#define BOOT_ZOOM 150.0f        // model units to pixels
+#define BOOT_CENTER_Y 26        // row the model is drawn around, the bar takes the lower rows
+#define BOOT_RING_SEGMENTS 20   // corners of a circle of the model
+#define BOOT_CUP_TOP 0.62f      // the cup sits between these heights ...
+#define BOOT_CUP_BOTTOM -0.42f
+#define BOOT_CUP_RADIUS_TOP 0.80f  // ... and tapers from this radius ...
+#define BOOT_CUP_RADIUS_BOTTOM 0.52f // ... down to this one
+#define BOOT_CUP_STRUTS 8       // vertical lines between the rim and the foot
+#define BOOT_HANDLE_RADIUS 0.34f
+#define BOOT_HANDLE_X 0.92f     // the handle sits outside the wall, at the height of the middle of the cup
+#define BOOT_HANDLE_Y 0.18f
+#define BOOT_READY_MS 2500      // the bar is full when the scale is expected to be ready (20 tare measures at 10/s)
+#define BOOT_BAR_Y 54
+#define BOOT_BAR_HEIGHT 9
+
 // Progress bar of the grinding screen, filled towards the set weight
 #define GRIND_BAR_Y 39
 #define GRIND_BAR_HEIGHT 12
@@ -613,6 +632,93 @@ void handleDebugMenuAction()
 }
 
 
+// Rounds a drawing coordinate to the nearest pixel
+static int toPixel(float value)
+{
+  return (int)lroundf(value);
+}
+
+// Turns a point of the wireframe model around the upright axis, tilts it towards the viewer
+// and projects it onto the display
+static void bootProject(float x, float y, float z, float turn, int &screenX, int &screenY)
+{
+  float turnedX = x * cos(turn) + z * sin(turn);
+  float turnedZ = -x * sin(turn) + z * cos(turn);
+  float tiltedY = y * cos(BOOT_TILT) - turnedZ * sin(BOOT_TILT);
+  float tiltedZ = y * sin(BOOT_TILT) + turnedZ * cos(BOOT_TILT);
+  float scale = BOOT_ZOOM / (BOOT_CAMERA - tiltedZ);
+  screenX = 64 + toPixel(turnedX * scale);
+  screenY = BOOT_CENTER_Y - toPixel(tiltedY * scale);
+}
+
+// Draws a circle of the model lying flat at the given height
+static void bootDrawRing(float radius, float height, float turn)
+{
+  int previousX = 0, previousY = 0;
+  for (int corner = 0; corner <= BOOT_RING_SEGMENTS; corner++)
+  {
+    float angle = corner * 2 * PI / BOOT_RING_SEGMENTS;
+    int x, y;
+    bootProject(cos(angle) * radius, height, sin(angle) * radius, turn, x, y);
+    if (corner > 0)
+    {
+      screen.drawLine(previousX, previousY, x, y);
+    }
+    previousX = x;
+    previousY = y;
+  }
+}
+
+// Draws one frame of the boot screen: an espresso cup as a turning wireframe model above a bar
+// that fills while the scale tares
+static void drawBootScreen()
+{
+  static unsigned long bootStartedAt = 0;
+  if (bootStartedAt == 0)
+  {
+    bootStartedAt = millis();
+  }
+  unsigned long elapsed = millis() - bootStartedAt;
+  float turn = elapsed % BOOT_TURN_MS / (float)BOOT_TURN_MS * 2 * PI;
+
+  bootDrawRing(BOOT_CUP_RADIUS_TOP, BOOT_CUP_TOP, turn);
+  bootDrawRing(BOOT_CUP_RADIUS_BOTTOM, BOOT_CUP_BOTTOM, turn);
+
+  // The wall between the rim and the foot
+  for (int strut = 0; strut < BOOT_CUP_STRUTS; strut++)
+  {
+    float angle = strut * 2 * PI / BOOT_CUP_STRUTS;
+    int topX, topY, bottomX, bottomY;
+    bootProject(cos(angle) * BOOT_CUP_RADIUS_TOP, BOOT_CUP_TOP, sin(angle) * BOOT_CUP_RADIUS_TOP, turn, topX, topY);
+    bootProject(cos(angle) * BOOT_CUP_RADIUS_BOTTOM, BOOT_CUP_BOTTOM, sin(angle) * BOOT_CUP_RADIUS_BOTTOM, turn, bottomX, bottomY);
+    screen.drawLine(topX, topY, bottomX, bottomY);
+  }
+
+  // The handle is a ring standing upright next to the wall, so it swings around the cup while it turns
+  int previousX = 0, previousY = 0;
+  for (int corner = 0; corner <= BOOT_RING_SEGMENTS; corner++)
+  {
+    float angle = corner * 2 * PI / BOOT_RING_SEGMENTS;
+    int x, y;
+    bootProject(BOOT_HANDLE_X + cos(angle) * BOOT_HANDLE_RADIUS, BOOT_HANDLE_Y + sin(angle) * BOOT_HANDLE_RADIUS, 0, turn, x, y);
+    if (corner > 0)
+    {
+      screen.drawLine(previousX, previousY, x, y);
+    }
+    previousX = x;
+    previousY = y;
+  }
+
+  // How far the tare has come, the fill keeps one pixel of air to the frame
+  float progress = min(1.0f, elapsed / (float)BOOT_READY_MS);
+  screen.drawFrame(0, BOOT_BAR_Y, 128, BOOT_BAR_HEIGHT);
+  int fill = toPixel(progress * (128 - 4));
+  if (fill > 0)
+  {
+    screen.drawBox(2, BOOT_BAR_Y + 2, fill, BOOT_BAR_HEIGHT - 4);
+  }
+}
+
 static float grindBarFill = 0;        // Fill of the progress bar as drawn, follows the reading smoothly
 static unsigned long grindBarDrawnAt = 0; // Time of the last progress bar update
 
@@ -658,8 +764,7 @@ void refreshDisplay()
 
   if (scaleLastUpdatedAt == 0)
   {
-    screen.setFontPosTop();
-    screen.drawStr(0, 20, "Initializing...");
+    drawBootScreen();
   }
   else if (!scaleReady)
   {
@@ -793,7 +898,9 @@ void setupDisplay()
   screen.begin();                    // Initialize the display
   screen.setFont(u8g2_font_7x13_tr); // Set the default font
   screen.setFontPosTop();
-  screen.drawStr(0, 20, "Hello"); // Display a welcome message
+  screen.clearBuffer();
+  drawBootScreen(); // First frame of the boot screen, the display task continues the animation
+  screen.sendBuffer();
 
   // Create a task to update the display
   xTaskCreatePinnedToCore(
