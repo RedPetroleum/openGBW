@@ -108,5 +108,30 @@ T MathBuffer<T, S>::firstValueOlderThan(int64_t cutoffMs) {
   return 0;
 }
 
+// True if the last n samples all lie within tolerance of each other,
+// false if there are not that many samples yet
+template<typename T,size_t S>
+bool MathBuffer<T, S>::isSteady(size_t n, T tolerance) {
+  if (n == 0 || count < n) {
+    return false;
+  }
+
+  T min = 0, max = 0;
+  for (int i = 0; i < (int)n; i++) {
+    int index = (headIndex - i); // going backward to go from newest to oldest
+    if (index < 0) { // wrap around
+      index += S;
+    }
+    if (i == 0 || buffer[index] < min) {
+      min = buffer[index];
+    }
+    if (i == 0 || buffer[index] > max) {
+      max = buffer[index];
+    }
+  }
+
+  return max - min <= tolerance;
+}
+
 // Macro to calculate the absolute value
 #define ABS(a) (((a) > 0) ? (a) : ((a) * -1))

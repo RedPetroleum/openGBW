@@ -121,3 +121,13 @@ All games use the scale as a pressure sensor: remove the cup and press on the sc
 - **Doom**: a small first person shooter in the style of Wolfenstein 3D with sprites from Doom. Press the scale to walk forward and pull it up gently to walk backward (the harder, the faster), turn the knob to look around and click to fire. Dead enemies drop ammo. Doors open when you walk into them, locked doors need a key. The pause menu has a map of the explored level. Find the exit, the fastest time is saved.
 
   <img src="screenshots/doom-fire.png" alt="Doom" width="256">
+  
+------------
+### To-Do
+
+- Game: Snake https://github.com/Stiju/arduino_snake 
+- Better Loading Screen
+- Game: Flappy Bird
+- Debug-Option: Disable Grinding (Show Dot or something instead)
+- Better grinding Screen with graph or loading screen or something. 
+- Game: Death Star: https://drive.google.com/drive/folders/19_JMvg4HcsPCw0QcT5VSEuF0uNpCn1_V

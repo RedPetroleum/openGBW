@@ -56,6 +56,8 @@ extern bool debugMode;
 #define CUP_WEIGHT 396.1 //war 292
 #define CUP_WEIGHT_2 76.3 // second cup
 #define CUP_DETECTION_TOLERANCE 10 // 5 grams tolerance above or bellow cup weight to detect it
+#define STEADY_READINGS 3 // this many readings in a row ...
+#define STEADY_TOLERANCE 0.1 // ... within this many grams of each other mean the reading has settled
 
 #define LOADCELL_DOUT_PIN 19
 #define LOADCELL_SCK_PIN 18
@@ -73,6 +75,8 @@ extern bool debugMode;
 #define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
 #define NO_PROGRESS_START_DELAY 10000 // "no progress" abort is only checked this long (ms) after grinding started
 #define NO_PROGRESS_WINDOW 7000 // ... and only when less than 1g was ground within this window (ms)
+#define FINISHED_MIN_WAIT 1500 // wait at least this long (ms) after the grinder stopped before measuring the dose
+#define FINISHED_MAX_WAIT 6000 // ... and at most this long if the reading never settles
 
 #define GRINDER_ACTIVE_PIN 25 // war 33
 

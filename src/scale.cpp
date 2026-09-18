@@ -105,9 +105,11 @@ void abortGrinding(const char *reason) {
 }
 
 // Checks if the given cup has been resting on the scale for the last second
+// and the reading has settled, so the empty cup is weighed accurately
 bool isCupDetected(double cupWeight) {
     return ABS(weightHistory.minSince((int64_t)millis() - 1000) - cupWeight) < CUP_DETECTION_TOLERANCE &&
-           ABS(weightHistory.maxSince((int64_t)millis() - 1000) - cupWeight) < CUP_DETECTION_TOLERANCE;
+           ABS(weightHistory.maxSince((int64_t)millis() - 1000) - cupWeight) < CUP_DETECTION_TOLERANCE &&
+           weightHistory.isSteady(STEADY_READINGS, STEADY_TOLERANCE);
 }
 
 // Task to manage the status of the scale
@@ -191,7 +193,13 @@ void scaleStatusLoop(void *p) {
                     startedGrindingAt = 0;
                     scaleStatus = STATUS_EMPTY;
                     continue;
-                } else if (currentWeight != setWeight + cupWeightEmpty && millis() - finishedGrindingAt > 1500 && newOffset) {
+                // Measure the dose once the reading has settled, the last grounds take a moment
+                // to land; after FINISHED_MAX_WAIT it is measured anyway so a restless scale
+                // still updates the offset
+                } else if (currentWeight != setWeight + cupWeightEmpty && newOffset &&
+                           millis() - finishedGrindingAt > FINISHED_MIN_WAIT &&
+                           (weightHistory.isSteady(STEADY_READINGS, STEADY_TOLERANCE) ||
+                            millis() - finishedGrindingAt > FINISHED_MAX_WAIT)) {
                     double usedOffset = offset;
                     offset += setWeight + cupWeightEmpty - currentWeight;
                     if (ABS(offset) >= setWeight) {

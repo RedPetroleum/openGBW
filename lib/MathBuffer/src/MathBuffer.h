@@ -18,6 +18,7 @@ public:
 	T maxSince(int64_t cutoffMs);
 	T minSince(int64_t cutoffMs);
 	T firstValueOlderThan(int64_t cutoffMs);
+	bool isSteady(size_t n, T tolerance);
 
 private:
 	T buffer[S];
