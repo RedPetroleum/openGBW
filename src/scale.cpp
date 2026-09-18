@@ -156,7 +156,7 @@ void scaleStatusLoop(void *p) {
                     continue;
                 }
                 if (millis() - startedGrindingAt > NO_PROGRESS_START_DELAY &&
-                    scaleWeight - weightHistory.firstValueOlderThan(millis() - 2000) < 1 &&
+                    scaleWeight - weightHistory.firstValueOlderThan(millis() - NO_PROGRESS_WINDOW) < 1 &&
                     !scaleMode) {
                     abortGrinding("No progress");
                     continue;

@@ -72,6 +72,7 @@ extern bool debugMode;
 #define MAX_GRINDING_TIME 60000 // 60 seconds (war 40, davor 20)
 #define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
 #define NO_PROGRESS_START_DELAY 10000 // "no progress" abort is only checked this long (ms) after grinding started
+#define NO_PROGRESS_WINDOW 7000 // ... and only when less than 1g was ground within this window (ms)
 
 #define GRINDER_ACTIVE_PIN 25 // war 33
 
