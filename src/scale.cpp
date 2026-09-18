@@ -45,6 +45,7 @@ void tareScale() {
     for (int measure = 0; measure < TARE_MEASURES; measure++) {
         if (!loadcell.wait_ready_timeout(300)) {
             Serial.println("Tare aborted, scale does not answer");
+            scaleReady = false;
             return; // lastTareAt stays untouched, so this is tried again right away
         }
         long reading = loadcell.read();
@@ -81,6 +82,9 @@ void updateScale(void *parameter) {
             Serial.println("current offset");
             Serial.println(offset);
             tareScale();
+            if (lastTareAt == 0) {
+                continue; // the tare did not succeed, no readings before the scale has a zero point
+            }
         }
         if (loadcell.wait_ready_timeout(300)) {
             // Single readings without the (lagging) Kalman estimate: the game needs the laser to react

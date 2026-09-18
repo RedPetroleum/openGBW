@@ -62,7 +62,9 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define BOOT_HANDLE_RADIUS 0.34f
 #define BOOT_HANDLE_X 0.92f     // the handle sits outside the wall, at the height of the middle of the cup
 #define BOOT_HANDLE_Y 0.18f
-#define BOOT_READY_MS 2500      // the bar is full when the scale is expected to be ready (20 tare measures at 10/s)
+#define BOOT_READY_MS 3000      // time the bar needs to fill: the load cell settles, 20 tare measures
+                                // at 10/s follow and then the first reading. The boot screen is not
+                                // left before the bar is full, even if the scale is ready earlier
 #define BOOT_BAR_Y 54
 #define BOOT_BAR_HEIGHT 9
 
@@ -636,6 +638,14 @@ void handleDebugMenuAction()
 }
 
 
+static unsigned long bootStartedAt = 0; // First frame of the boot screen
+
+// True while the bar of the boot screen has not filled up yet
+static bool bootScreenBusy()
+{
+  return bootStartedAt == 0 || millis() - bootStartedAt < BOOT_READY_MS;
+}
+
 // Rounds a drawing coordinate to the nearest pixel
 static int toPixel(float value)
 {
@@ -677,7 +687,6 @@ static void bootDrawRing(float radius, float height, float turn)
 // that fills while the scale tares
 static void drawBootScreen()
 {
-  static unsigned long bootStartedAt = 0;
   if (bootStartedAt == 0)
   {
     bootStartedAt = millis();
@@ -713,7 +722,8 @@ static void drawBootScreen()
     previousY = y;
   }
 
-  // How far the tare has come, the fill keeps one pixel of air to the frame
+  // The bar fills evenly over the time the scale needs to get ready, the fill keeps one pixel of air
+  // to the frame
   float progress = min(1.0f, elapsed / (float)BOOT_READY_MS);
   screen.drawFrame(0, BOOT_BAR_Y, 128, BOOT_BAR_HEIGHT);
   int fill = toPixel(progress * (128 - 4));
@@ -766,9 +776,9 @@ void refreshDisplay()
     return;
   }
 
-  if (scaleLastUpdatedAt == 0)
+  if (scaleLastUpdatedAt == 0 || bootScreenBusy())
   {
-    drawBootScreen();
+    drawBootScreen(); // stays up until the scale is ready and the bar has filled up
   }
   else if (!scaleReady)
   {
