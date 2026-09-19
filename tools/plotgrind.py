@@ -498,13 +498,16 @@ def v01(t, values):
 
 
 def derivative(times, values):
-    """Change per second of a curve, from the reading before to the one after each point"""
+    """Change per second of a curve, over the two readings before each point.
+
+    Backwards only. A centred difference would be smoother, but it looks one reading into the future,
+    and a filter on the scale cannot - what is drawn here has to be what the firmware can compute.
+    """
     out = []
     for index in range(len(values)):
-        low = max(0, index - 1)
-        high = min(len(values) - 1, index + 1)
-        span = times[high] - times[low]
-        out.append((values[high] - values[low]) / span if span > 0 else 0.0)
+        low = max(0, index - 2)
+        span = times[index] - times[low]
+        out.append((values[index] - values[low]) / span if span > 0 else 0.0)
     return out
 
 

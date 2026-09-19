@@ -169,6 +169,214 @@ static double v02Filter(double grams) {
     return kalmanFilter.updateEstimate(sum / v02Count);
 }
 
+// ---------------------------------------------------------------------------------------------------
+// The three detectors of v03 and its display, developed in tools/plotgrind.py. One ring of the last
+// readings feeds all of them
+
+static double detValues[FILTER_V03_WINDOW];
+static double detSeconds[FILTER_V03_WINDOW];
+static int detCount = 0;
+static double detAverages[3] = {0, 0, 0}; // the newest three moving averages, newest first ...
+static double detAverageAt[3] = {0, 0, 0}; // ... and when they were taken
+static int detAverageCount = 0;
+
+// Difference between the highest and the lowest of the newest `count` readings
+static double detSpan(int count) {
+    double lowest = detValues[detCount - count], highest = lowest;
+    for (int i = detCount - count; i < detCount; i++) {
+        if (detValues[i] < lowest) {
+            lowest = detValues[i];
+        }
+        if (detValues[i] > highest) {
+            highest = detValues[i];
+        }
+    }
+    return highest - lowest;
+}
+
+// Slope of a straight line through the newest `count` readings, in grams per second
+static double detSlope(int count) {
+    if (count < 2) {
+        return 0;
+    }
+    int first = detCount - count;
+    double meanTime = 0, meanValue = 0;
+    for (int i = first; i < detCount; i++) {
+        meanTime += detSeconds[i];
+        meanValue += detValues[i];
+    }
+    meanTime /= count;
+    meanValue /= count;
+
+    double spread = 0, mixed = 0;
+    for (int i = first; i < detCount; i++) {
+        spread += (detSeconds[i] - meanTime) * (detSeconds[i] - meanTime);
+        mixed += (detSeconds[i] - meanTime) * (detValues[i] - meanValue);
+    }
+    return spread > 0 ? mixed / spread : 0;
+}
+
+// How flat it lies: from the spread of the readings, with the rate as a veto over it
+static double flatV01(double change) {
+    if (detCount < FLAT_V01_SHORT) {
+        return 0;
+    }
+    double speed = ABS(change);
+    if (speed >= FLAT_V01_MOVING) {
+        return 0;
+    }
+    double damped = speed < FLAT_V01_QUIET ? 1.0
+                    : 1.0 - (speed - FLAT_V01_QUIET) / (FLAT_V01_MOVING - FLAT_V01_QUIET);
+
+    double short_ = detSpan(FLAT_V01_SHORT);
+    if (short_ > FLAT_V01_WIDE) {
+        return 0;
+    }
+    if (short_ > FLAT_V01_TIGHT) { // between the two spreads, interpolated over the grams
+        double share = (short_ - FLAT_V01_TIGHT) / (FLAT_V01_WIDE - FLAT_V01_TIGHT);
+        return damped * (FLAT_V01_FEW - share * (FLAT_V01_FEW - FLAT_V01_LOOSE));
+    }
+
+    int count = FLAT_V01_SHORT; // how far back the readings still lie within the tight spread
+    int most = detCount < FLAT_V01_LONG ? detCount : FLAT_V01_LONG;
+    while (count < most && detSpan(count + 1) <= FLAT_V01_TIGHT) {
+        count++;
+    }
+    double share = (double)(count - FLAT_V01_SHORT) / (FLAT_V01_LONG - FLAT_V01_SHORT);
+    return damped * (FLAT_V01_FEW + share * (1.0 - FLAT_V01_FEW));
+}
+
+// 1 inside the core range, fading to 0 at the edges of the wide one, 0 outside it
+static double grindShare(double rate) {
+    if (rate <= GRIND_V01_WIDE_LOW || rate >= GRIND_V01_WIDE_HIGH) {
+        return 0;
+    }
+    if (rate < GRIND_V01_CORE_LOW) {
+        return (rate - GRIND_V01_WIDE_LOW) / (GRIND_V01_CORE_LOW - GRIND_V01_WIDE_LOW);
+    }
+    if (rate > GRIND_V01_CORE_HIGH) {
+        return (GRIND_V01_WIDE_HIGH - rate) / (GRIND_V01_WIDE_HIGH - GRIND_V01_CORE_HIGH);
+    }
+    return 1.0;
+}
+
+// Coffee is falling: the weight rises at a rate a grinder makes, and has been for a while
+static double grindingV01(double change) {
+    double best = 0;
+    int most = detCount < GRIND_V01_LONG ? detCount : GRIND_V01_LONG;
+    for (int count = most; count >= GRIND_V01_SHORT; count--) {
+        double share = grindShare(detSlope(count));
+        if (share > 0) {
+            double reach = (double)(count - GRIND_V01_SHORT) / (GRIND_V01_LONG - GRIND_V01_SHORT);
+            double value = GRIND_V01_FEW + reach * (1.0 - GRIND_V01_FEW) * share;
+            if (value > best) {
+                best = value;
+            }
+        }
+    }
+    return change < GRIND_V01_QUIET && best < GRIND_V01_SURE ? 0 : best;
+}
+
+// True where the three detectors agree that the weight is lying flat and nothing else is going on.
+// A detector has to be at 1 to win, or at DECIDED_V01_ALONE when the other two are at zero; grinding
+// beats something being put on when both are at 1, and any other tie is no answer at all
+static bool flatDecided(double flat, double placed, double grinding) {
+    int full = (flat >= 1.0) + (placed >= 1.0) + (grinding >= 1.0);
+    if (full == 1) {
+        return flat >= 1.0;
+    }
+    if (full > 1) {
+        return false; // several at once: either grinding wins, or nobody - never flat
+    }
+    return flat >= DECIDED_V01_ALONE && placed == 0 && grinding == 0;
+}
+
+// One reading into the detectors; returns whether they say the weight is lying flat
+static bool v03Detect(double grams, unsigned long at, double previous) {
+    if (detCount == FILTER_V03_WINDOW) {
+        for (int i = 1; i < FILTER_V03_WINDOW; i++) {
+            detValues[i - 1] = detValues[i];
+            detSeconds[i - 1] = detSeconds[i];
+        }
+        detCount--;
+    }
+    detValues[detCount] = grams;
+    detSeconds[detCount] = at / 1000.0;
+    detCount++;
+
+    // The moving average and how fast it changes - backwards over two readings, see config.hpp
+    int span = detCount < FILTER_V03_AVERAGE ? detCount : FILTER_V03_AVERAGE;
+    double sum = 0;
+    for (int i = detCount - span; i < detCount; i++) {
+        sum += detValues[i];
+    }
+    for (int i = 2; i > 0; i--) {
+        detAverages[i] = detAverages[i - 1];
+        detAverageAt[i] = detAverageAt[i - 1];
+    }
+    detAverages[0] = sum / span;
+    detAverageAt[0] = at / 1000.0;
+    if (detAverageCount < 3) {
+        detAverageCount++;
+    }
+    double change = 0;
+    if (detAverageCount == 3 && detAverageAt[0] > detAverageAt[2]) {
+        change = (detAverages[0] - detAverages[2]) / (detAverageAt[0] - detAverageAt[2]);
+    }
+
+    return flatDecided(flatV01(change),
+                       ABS(grams - previous) > PLACED_V01_GRAMS ? 1.0 : 0.0,
+                       grindingV01(change));
+}
+
+// The display of v03: it steps like the ordinary hysteresis while the weight moves, but where the
+// detectors say it lies flat, a single step also needs v02 to land on that same step. And a shown value
+// within ZERO_V03_GRAMS of zero for ZERO_V03_READINGS readings in a row is shown as a plain zero -
+// the display only, the weight behind it is untouched and nothing is tared
+static void updateShownV03(double value, double other, double softFlat, bool flat) {
+    static int units = 0, pending = 0, direction = 0, zeros = 0;
+    static bool started = false;
+
+    int wanted = (int)lround(value / DISPLAY_STEP);
+    if (!started) {
+        units = wanted;
+        started = true;
+    }
+    bool strict = softFlat >= HYSTERESIS_FLAT_FROM;
+    double extra = strict ? HYSTERESIS_GRAMS_FLAT : HYSTERESIS_GRAMS;
+    int confirm = strict ? HYSTERESIS_READINGS_FLAT : HYSTERESIS_READINGS;
+
+    int delta = wanted - units;
+    if (delta >= 2 || delta <= -2) {
+        units = wanted; // more than one step, the hysteresis does not apply
+        pending = direction = 0;
+    } else if (delta == 0) {
+        pending = direction = 0;
+    } else {
+        if (delta != direction) {
+            direction = delta;
+            pending = 0;
+        }
+        pending++;
+        double boundary = (units + delta * 0.5) * DISPLAY_STEP + delta * extra;
+        if (pending >= confirm || (value - boundary) * delta >= 0) {
+            if (!flat) {
+                units += delta; // the weight is moving, the display has to follow
+                pending = direction = 0;
+            } else if ((int)lround(other / DISPLAY_STEP) == units + delta) {
+                units += delta; // lying flat and v02 agrees: the step is real
+                pending = direction = 0;
+            }
+            // Lying flat and v02 still on the old step: no step, and `pending` is kept so it is made
+            // the moment v02 comes along
+        }
+    }
+
+    double shown = units * DISPLAY_STEP;
+    zeros = ABS(shown) <= ZERO_V03_GRAMS ? zeros + 1 : 0;
+    shownWeight = zeros >= ZERO_V03_READINGS ? 0.0 : shown;
+}
+
 // Rounds the weight to DISPLAY_STEP, with the hysteresis described in config.hpp. The shown value is
 // kept as a whole number of steps, otherwise adding 0.1 over and over drifts off
 static void updateShownWeight(double weight, double flatness) {
@@ -255,12 +463,29 @@ void updateScale(void *parameter) {
 #if FILTER == FILTER_V01
                 double filtered = v01Filter(grams, millis());
                 double flatness = 1.0 - ABS(v01Slope) / FILTER_V01_FLAT_SLOPE;
-#else
+#elif FILTER == FILTER_V02
                 double filtered = v02Filter(grams);
                 double flatness = 0; // v02 knows nothing about flat stretches, the soft hysteresis holds
+#else
+                // v03 runs both: its weight is the one of v01, and v02 has a say in the display
+                static double v03Previous = 0;
+                bool flat = v03Detect(grams, millis(), v03Previous);
+                v03Previous = grams;
+                double filtered = v01Filter(grams, millis());
+                double other = v02Filter(grams);
+                double flatness = 1.0 - ABS(v01Slope) / FILTER_V01_FLAT_SLOPE;
 #endif
                 if (!fastReadings) {
+#if FILTER == FILTER_V03
+                    previousScaleWeight = scaleWeight;
+                    scaleWeight = filtered;
+                    updateShownV03(filtered, other, flatness > 0 ? flatness : 0, flat);
+                    scaleLastUpdatedAt = millis();
+                    weightHistory.push(scaleWeight);
+                    scaleReady = true;
+#else
                     publishWeight(filtered, flatness > 0 ? flatness : 0);
+#endif
                 }
 #endif
             }

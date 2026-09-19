@@ -79,10 +79,14 @@ extern bool debugMode;
 // the display hysteresis stays on its soft level with it.
 //
 // FILTER picks which one the scale runs
+// Filter v03: the value of v01, but the display is only allowed to step by one when the scale is not
+// lying flat - and where it is, v02 has to land on that same step first. Whether it lies flat is what
+// the three detectors below decide. All of it was developed and tried out in tools/plotgrind.py
 #define FILTER_OLD 0
 #define FILTER_V01 1
 #define FILTER_V02 2
-#define FILTER FILTER_V02
+#define FILTER_V03 3
+#define FILTER FILTER_V03
 #define FILTER_FAST (FILTER != FILTER_OLD) // ... delivers a weight for every reading, ten a second
 #define FILTER_V01_LONGEST 40     // readings the window may grow to
 #define FILTER_V01_SHORTEST 2     // ... and never falls below
@@ -92,6 +96,40 @@ extern bool debugMode;
 #define FILTER_V01_KALMAN_NOISE 0.02 // ... and its process noise; only the ratio of the two does anything
 #define FILTER_V01_FLAT_SLOPE 2.5 // g/s, from here on the line does not count as horizontal at all
 #define FILTER_V02_WINDOW 5       // readings of the moving average, the same number the old filter bundles
+
+// The three detectors of v03, each on the raw readings and each between 0 and 1. They need to know how
+// fast the weight really moves, which is the change of a moving average over FILTER_V03_AVERAGE
+// readings. On the scale that change is taken backwards over two readings; the drawing in
+// tools/plotgrind.py takes it centred, which no filter can do, but on the recordings both give the
+// same answer in every single reading
+#define FILTER_V03_WINDOW 20  // readings kept for the detectors
+#define FILTER_V03_AVERAGE 15 // readings of the moving average whose change they look at
+
+#define FLAT_V01_SHORT 5    // readings within FLAT_V01_TIGHT give FLAT_V01_FEW ...
+#define FLAT_V01_LONG 20    // ... and this many of them give the full 1
+#define FLAT_V01_FEW 0.8
+#define FLAT_V01_TIGHT 0.7  // g
+#define FLAT_V01_WIDE 1.2   // g, this spread over the short window gives FLAT_V01_LOOSE
+#define FLAT_V01_LOOSE 0.5
+#define FLAT_V01_QUIET 0.5  // g/s, up to this rate the value is left alone
+#define FLAT_V01_MOVING 1.0 // g/s, from here the weight is moving and the value is 0
+
+#define PLACED_V01_GRAMS 1.5 // g, a step of more than this between two readings
+
+#define GRIND_V01_CORE_LOW 0.5   // g/s, in here the full value is possible
+#define GRIND_V01_CORE_HIGH 5.5
+#define GRIND_V01_WIDE_LOW 0.4   // g/s, outside of this it is nothing, in between it fades
+#define GRIND_V01_WIDE_HIGH 6.0
+#define GRIND_V01_SHORT 5   // readings that give GRIND_V01_FEW ...
+#define GRIND_V01_LONG 20   // ... and this many give the full 1
+#define GRIND_V01_FEW 0.5
+#define GRIND_V01_QUIET 1.0 // g/s, below this rate a value under GRIND_V01_SURE is not grinding at all
+#define GRIND_V01_SURE 0.6
+
+#define DECIDED_V01_ALONE 0.8 // a detector this high wins when the other two are at zero
+
+#define ZERO_V03_GRAMS 0.2    // a shown value this close to zero ...
+#define ZERO_V03_READINGS 10  // ... for this many readings in a row is shown as a plain zero
 
 // The shown weight steps in DISPLAY_STEP grams. A step of one is only taken when the weight is
 // HYSTERESIS_GRAMS past the middle between two steps, or when HYSTERESIS_READINGS readings in a row all
