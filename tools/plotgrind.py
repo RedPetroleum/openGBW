@@ -106,9 +106,9 @@ HYSTERESIS_FLAT_FROM = 0.9 # flatness from which the harder conditions are used
 HYSTERESIS_GRAMS_FLAT = 0.05
 HYSTERESIS_READINGS_FLAT = 6
 
-# v03 takes the value of v01 and steps like any other filter. Only in a moment where a single step is
-# due, the ordinary conditions are met, flach_v01 is at 1 and v02 would land on that same step does the
-# value come from v02 instead. And a shown value this close to zero for this many readings in a row is
+# v03 takes the value of v01 and steps like any other filter while the weight moves. Where flach_v02
+# says it is lying flat, a single step also needs v02 to land on that same step, and the value then
+# comes from v02. And a shown value this close to zero for this many readings in a row is
 # shown as a plain zero - the weight itself is left alone, nothing is tared
 ZERO_V03_GRAMS = 0.2
 ZERO_V03_READINGS = 10
@@ -508,12 +508,12 @@ def derivative(times, values):
     return out
 
 
-def hysteresis_v03(values, soft_flat, detected_flat, other, step=DISPLAY_STEP):
+def hysteresis_v03(values, soft_flat, flat_decided, other, step=DISPLAY_STEP):
     """The hysteresis of v03. It steps exactly like the ordinary one - nothing is blocked.
 
-    The only thing v03 does differently: where a single step is due, the ordinary conditions are met,
-    flat_v01 is at 1 and v02 would land on that same step, the value taken is the one of v02 and not the
-    one of v01.
+    The only thing v03 does differently: where flach_v02 - the answer of the third panel, not the raw
+    detector - says the weight is lying flat, a single step also needs v02 to land on that same step,
+    and the value then comes from v02. Lying flat with v02 still on the old step, no step is made.
 
     Whatever it ends up showing, a value within ZERO_V03_GRAMS of zero for ZERO_V03_READINGS readings in
     a row is shown as a plain zero. Only the display: the value behind it keeps whatever it had, so this
@@ -540,7 +540,7 @@ def hysteresis_v03(values, soft_flat, detected_flat, other, step=DISPLAY_STEP):
             pending += 1
             boundary = (unit + delta * 0.5) * step + delta * extra
             if pending >= confirm or (value - boundary) * delta >= 0:
-                if detected_flat[index] < 1.0:
+                if flat_decided[index] < 1.0:
                     unit += delta # the weight is moving, the display has to follow v01
                     pending = direction = 0
                 elif int(round(other[index] / step)) == unit + delta:
@@ -555,10 +555,14 @@ def hysteresis_v03(values, soft_flat, detected_flat, other, step=DISPLAY_STEP):
     return out
 
 
-def v03(t, values, detected_flat):
-    """Always the value of v01; v02 only has a say in the hysteresis, see hysteresis_v03()"""
+def v03(t, values, flat_decided):
+    """Always the value of v01; v02 only has a say in the hysteresis, see hysteresis_v03().
+
+    `flat_decided` is flach_v02, the resolved answer, so v02 is only asked where the three detectors
+    agree that nothing else is going on.
+    """
     one, soft_flat = v01(t, values)
-    return hysteresis_v03(one, soft_flat, detected_flat, average_kalman_raw(t, values))
+    return hysteresis_v03(one, soft_flat, flat_decided, average_kalman_raw(t, values))
 
 
 def rate(t):
@@ -707,7 +711,7 @@ def plot_grind(log, theme, path, show, net, raw, step):
             (t, hysteresis(*v01(t, values)), theme["trained"],
              "v01: Gerade über das längste Fenster auf %.2f g, dann Kalman (q/Fehler %.0f)"
              % (ADAPTIVE_TOLERANCE, ADAPTIVE_KALMAN[2] / ADAPTIVE_KALMAN[0])),
-            (t, v03(t, values, flat), theme["mixed"],
+            (t, v03(t, values, flat_decided), theme["mixed"],
              "v03: v01, feine Schritte nur bei flach_v01 = 1 und Zustimmung von v02")):
         # Hidden, the code for them stays: the plain moving average and the two "neu" filters, whose
         # flatness came from the slope and from sigma - trend_filter() with slope_flatness or
