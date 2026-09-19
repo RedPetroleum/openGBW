@@ -38,30 +38,46 @@ bool greset = false;          // Flag for reset operation
 bool newOffset = false;       // Indicates if a new offset value is pending
 const char *grindFailReason = ""; // Why the last grind was aborted, shown on the display
 
-// Tares the scale (sets the current weight to zero). The readings are taken one by one instead of
-// through loadcell.tare(), so that a weight arriving while taring can be noticed: taring takes about
-// two seconds, and a cup placed during them would end up in the new zero point with a part of its weight.
-void tareScale() {
-    Serial.println("Taring scale");
-    long sum = 0, lowest = 0, highest = 0;
-    for (int measure = 0; measure < TARE_MEASURES; measure++) {
-        if (!loadcell.wait_ready_timeout(300)) {
-            Serial.println("Tare aborted, scale does not answer");
-            scaleReady = false;
-            return; // lastTareAt stays untouched, so this is tried again right away
-        }
-        long reading = loadcell.read();
-        sum += reading;
-        if (measure == 0 || reading < lowest) {
-            lowest = reading;
-        }
-        if (measure == 0 || reading > highest) {
-            highest = reading;
-        }
-        delay(0); // feeds the watchdog on the ESP32
+// Tares the scale (sets the current weight to zero). A tare is wanted while lastTareAt is zero, and
+// its readings are taken by the sampling loop in its normal rhythm - one per turn, through tareTake().
+// A tare that read its TARE_MEASURES readings in one go blocked the loop for about two seconds, in
+// which nothing was measured, published or logged and the display stood still. This way the weight
+// keeps running from the old zero point until the new one is there.
+//
+// The readings are taken one by one instead of through loadcell.tare(), so that a weight arriving
+// while taring can be noticed: a cup placed during those two seconds would otherwise end up in the
+// new zero point with a part of its weight
+static long tareSum = 0, tareLowest = 0, tareHighest = 0;
+static int tareCount = 0;
+
+// Throws away the readings of a running tare, which then starts over
+static void tareReset() {
+    tareSum = 0;
+    tareCount = 0;
+}
+
+// One reading into the running tare; sets the new zero point once TARE_MEASURES of them are together
+static void tareTake(long reading) {
+    if (tareCount == 0) {
+        Serial.println("retaring scale"); // the readings for it come from the sampling loop
+        Serial.println("current offset");
+        Serial.println(offset);
+    }
+    if (tareCount == 0 || reading < tareLowest) {
+        tareLowest = reading;
+    }
+    if (tareCount == 0 || reading > tareHighest) {
+        tareHighest = reading;
+    }
+    tareSum += reading;
+    tareCount++;
+    if (tareCount < TARE_MEASURES) {
+        return; // not enough readings yet, the next turn of the loop brings the next one
     }
 
-    double spread = ABS((highest - lowest) / scaleFactor);
+    double spread = ABS((tareHighest - tareLowest) / scaleFactor);
+    long average = tareSum / tareCount;
+    tareReset();
     if (spread > TARE_MAX_SPREAD) {
         Serial.printf("Tare discarded, the readings are %.1fg apart\n", spread);
         // Once the scale has a zero point, the next quiet moment is awaited instead of taring right away,
@@ -70,9 +86,10 @@ void tareScale() {
         return;
     }
 
-    loadcell.set_offset(sum / TARE_MEASURES);
+    loadcell.set_offset(average);
     scaleTared = true;
     lastTareAt = millis();
+    Serial.println("Scale tared");
 }
 
 // Filter v01, see config.hpp. The readings of the window and their time in seconds, oldest first;
@@ -447,15 +464,6 @@ static void publishWeight(double weight, double flatness) {
 // Task to continuously update the scale readings
 void updateScale(void *parameter) {
     for (;;) {
-        if (lastTareAt == 0) {
-            Serial.println("retaring scale");
-            Serial.println("current offset");
-            Serial.println(offset);
-            tareScale();
-            if (lastTareAt == 0) {
-                continue; // the tare did not succeed, no readings before the scale has a zero point
-            }
-        }
         if (loadcell.wait_ready_timeout(300)) {
             // Single readings without a filter: the game needs the laser to react quickly when the scale
             // is pressed, paging through the Weight History the same, and the Weight Data shows what the
@@ -470,9 +478,16 @@ void updateScale(void *parameter) {
             int taken = 0;
             for (int i = 0; i < bundle; i++) {
                 if (i > 0 && !loadcell.wait_ready_timeout(300)) {
+                    tareReset(); // a running tare starts over rather than average across the gap
                     break; // the chip stopped answering mid-bundle, the readings so far still give a weight
                 }
                 long raw = loadcell.read();
+                if (lastTareAt == 0) {
+                    tareTake(raw); // a tare is running, this reading is one of the ones it needs
+                }
+                if (!scaleTared) {
+                    continue; // the scale has no zero point yet, the reading says nothing about a weight
+                }
                 double grams = (raw - loadcell.get_offset()) / (double)loadcell.get_scale();
                 grindLogSample(raw, grams);
                 sum += grams;
@@ -510,6 +525,9 @@ void updateScale(void *parameter) {
 #endif
             }
             if (taken == 0) {
+                if (!scaleTared) {
+                    continue; // nothing to report, the readings went into the first tare
+                }
                 Serial.println("HX711 stopped answering.");
                 scaleReady = false;
                 continue;
@@ -525,6 +543,7 @@ void updateScale(void *parameter) {
         } else {
             Serial.println("HX711 not found.");
             scaleReady = false;
+            tareReset(); // a running tare starts over rather than average across the gap
         }
     }
 }
