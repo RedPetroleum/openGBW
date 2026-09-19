@@ -29,6 +29,7 @@ static unsigned long logStartedAt = 0; // millis() of the cup detection, all tim
 static unsigned long logStopAt = 0;    // the recording ends at this time, 0 while the grind is still running
 static unsigned long logSamples = 0;
 static char logReason[24] = "";
+static bool logManual = false; // started by hand over the serial connection, not by a grind
 static char logDetail[GRIND_LOG_MARK_LENGTH] = "";
 
 // Single producer (scale status task), single consumer (sampler task), so the two indices need no lock
@@ -54,8 +55,29 @@ static void writeMarks()
 
 // Cup detected: a grind starts. The header is written by the sampler task with the first reading, so the
 // values it contains are the ones the grind really runs with
+// Reads the commands of the serial connection: "r" starts a recording without a grind, "s" ends it.
+// Called by the scale status task, which is the only one that may hand markers to the sampler
+void grindLogPoll()
+{
+    while (Serial.available()) {
+        char command = Serial.read();
+        if (command == 'r' && !logManual) {
+            grindLogBegin();
+            logManual = true; // set after the begin, which would otherwise take it for a restart
+            grindLogMark("manual_start");
+        } else if (command == 's' && logManual) {
+            logManual = false;
+            grindLogEnd("manual");
+        }
+    }
+}
+
 void grindLogBegin()
 {
+    if (logManual) {
+        grindLogMark("grind_start"); // a grind during a recording by hand does not interrupt it
+        return;
+    }
     logMarkHead = logMarkTail; // an unfinished recording is dropped, the reader discards it
     logStartedAt = millis();
     logStopAt = 0;
@@ -90,6 +112,10 @@ void grindLogEnd(const char *reason, const char *format, ...)
     if (logState == GRIND_LOG_IDLE || logStopAt != 0) {
         return; // nothing is being recorded, or the tail is already running
     }
+    if (logManual) {
+        grindLogMark("grind_end %s", reason); // the recording by hand runs on until an "s" comes
+        return;
+    }
     snprintf(logReason, sizeof(logReason), "%s", reason);
     if (format != 0) {
         va_list args;
@@ -113,9 +139,10 @@ void grindLogSample(long raw, double grams)
         double cupSet = ABS(cupWeightEmpty - setCupWeight) <= ABS(cupWeightEmpty - setCupWeight2) ? setCupWeight : setCupWeight2;
         // shotCount is only counted up once the dose is verified, so the grind that is starting here
         // is the next one; that is also the number it gets in the Weight History
-        Serial.printf("GBW>begin v=%d t=%lu shot=%u cup_set=%.2f cup_empty=%.2f target=%.2f offset=%.2f "
+        Serial.printf("GBW>begin v=%d kind=%s t=%lu shot=%u cup_set=%.2f cup_empty=%.2f target=%.2f offset=%.2f "
                       "sf=%.3f tare=%ld bundle=%d mode=%s grinder=%s\n",
-                      GRIND_LOG_VERSION, logStartedAt, shotCount + 1, cupSet, cupWeightEmpty, setWeight, offset,
+                      GRIND_LOG_VERSION, logManual ? "manual" : "grind", logStartedAt, shotCount + 1,
+                      cupSet, cupWeightEmpty, setWeight, offset,
                       (double)loadcell.get_scale(), loadcell.get_offset(), SCALE_READINGS_PER_UPDATE,
                       scaleMode ? "timer" : "weight", grindMode ? "continuous" : "impulse");
         Serial.println("GBW>cols t_ms raw g");

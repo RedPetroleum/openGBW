@@ -453,10 +453,13 @@ def plot_grind(log, theme, path, show, net, raw, step, flat):
     figure, (axis, below) = plt.subplots(2, 1, figsize=(10, 6.2), sharex=True,
                                          gridspec_kw=dict(height_ratios=[4, 1]),
                                          constrained_layout=True)
-    figure.suptitle("Shot %s  -  %s g in %s s, %s  (%d Messungen)"
-                    % (meta.get("shot", "?"), end.get("dose", "?"), end.get("dur", "?"),
-                       end.get("reason", "?"), len(samples)),
-                    fontsize=11, x=0.01, ha="left")
+    if meta.get("kind") == "manual":
+        title = "Aufnahme von Hand  -  %.1f s, %d Messungen" % (t[-1] - t[0], len(samples))
+    else:
+        title = ("Shot %s  -  %s g in %s s, %s  (%d Messungen)"
+                 % (meta.get("shot", "?"), end.get("dose", "?"), end.get("dur", "?"),
+                    end.get("reason", "?"), len(samples)))
+    figure.suptitle(title, fontsize=11, x=0.01, ha="left")
     axis.plot(t, values, linestyle="none", marker="o", markersize=2.8,
               color=theme["series"][0], markeredgewidth=0, label="Messwerte", zorder=3)
     # Both filters are drawn as the staircases they are: a filter holds its value until its next update,
@@ -517,7 +520,8 @@ def plot_grind(log, theme, path, show, net, raw, step, flat):
     below.set_ylim(0, 1)
     below.set_yticks((0, 0.5, 1))
     below.set_ylabel("flach")
-    below.set_xlabel("Zeit seit Cup-Erkennung (s)")
+    below.set_xlabel("Zeit seit Aufnahmestart (s)" if meta.get("kind") == "manual"
+                     else "Zeit seit Cup-Erkennung (s)")
     below.grid(axis="y", color=theme["grid"], linewidth=0.6)
     below.set_axisbelow(True)
     event_lines(below, marks, theme, label=False)

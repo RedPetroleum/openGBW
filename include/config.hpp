@@ -119,7 +119,7 @@ extern bool debugMode;
 #define WAKE_WEIGHT_CHANGE 1.0 // a change of this many grams between two readings (e.g. tapping the scale) counts as activity
 #define WAKE_IGNORE_AFTER_TARE_MS 3000 // readings settle this long after taring, their changes do not count as activity
 #if FILTER_V01
-#define MAX_PLAUSIBLE_WEIGHT_JUMP 0.6 // larger jumps between two readings are treated as spikes when stopping
+#define MAX_PLAUSIBLE_WEIGHT_JUMP 1.2 // larger jumps between two readings are treated as spikes when stopping
 #else
 #define MAX_PLAUSIBLE_WEIGHT_JUMP 3   // ... five times as much, because a reading is five times as far apart
 #endif

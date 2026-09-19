@@ -57,6 +57,8 @@ class HardwareSerial : public Print
 public:
   void begin(unsigned long) {}
   operator bool() const { return true; }
+  int available() { return 0; } // no commands reach the simulator
+  int read() { return -1; }
   size_t write(uint8_t c) override;
   size_t printf(const char *format, ...);
 };

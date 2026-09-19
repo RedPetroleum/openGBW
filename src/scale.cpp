@@ -434,6 +434,7 @@ void scaleStatusLoop(void *p) {
                 break;
             }
         }
+        grindLogPoll(); // "r" and "s" on the serial connection start and end a recording without a grind
         rotary_loop();
         delay(50);
     }

@@ -136,6 +136,15 @@ t_ms,raw,g
 
 `raw` is the 24 bit value of the HX711, `g` the same reading as grams, `(raw - tare) / sf`. `bundle` in the header is `SCALE_READINGS_PER_UPDATE` in [include/config.hpp](include/config.hpp): how many of these readings the firmware averages into one weight for the grinding itself (five, so the weight is updated twice a second). The log always contains every single reading, no matter what that value is, so a different bundling can be tried out on a recorded grind before it is built into the firmware.
 
+It can also record without a grind, for the noise of a resting scale or for weights put on by hand. An `r` over the same connection starts such a recording and an `s` ends it; a grind that starts meanwhile does not interrupt it, it only leaves its markers in it:
+
+```sh
+tools/grindlog.py --record 30           # record 30 seconds, then stop
+tools/grindlog.py --record 0            # record until Ctrl-C
+```
+
+Those land in `logs/manual-<time>.csv` and carry `kind: manual` in their header.
+
 The format of the lines is described in [include/grindlog.hpp](include/grindlog.hpp).
 
 `tools/plotgrind.py` draws the recorded grinds (needs `matplotlib`):

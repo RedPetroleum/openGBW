@@ -10,6 +10,14 @@ of one grind and writes them into their own file, one per grind:
     tools/grindlog.py --echo                # also show the other serial output of the firmware
     tools/grindlog.py --replay captured.txt # take the lines from a file instead of the port
 
+It can also record without a grind, for the noise of a resting scale or for weights put on by hand:
+
+    tools/grindlog.py --record 30           # record 30 seconds, then stop
+    tools/grindlog.py --record 0            # record until Ctrl-C
+
+The scale is told to do that with an "r" over the same connection and stopped again with an "s". A
+grind that starts during such a recording does not interrupt it, it only leaves its markers in it.
+
 The files are CSV with the description of the grind in the leading comment lines, so they can be read with
 pandas.read_csv(path, comment="#") and the comments with json.loads of everything after "# meta " etc.
 """
@@ -21,6 +29,7 @@ import json
 import os
 import re
 import sys
+import time
 
 PREFIX = "GBW>"
 FIELD = re.compile(r'([A-Za-z_][A-Za-z_0-9]*)=("[^"]*"|\S*)')
@@ -54,6 +63,8 @@ class Grind:
 
     def name(self):
         stamp = self.recorded.strftime("%Y%m%d-%H%M%S")
+        if self.meta.get("kind") == "manual":
+            return f"manual-{stamp}.csv"
         shot = self.meta.get("shot")
         return f"grind-{stamp}-shot{shot}.csv" if shot is not None else f"grind-{stamp}.csv"
 
@@ -89,7 +100,7 @@ class Grind:
     def summary(self):
         end = self.end or {}
         parts = [
-            "shot %s" % self.meta.get("shot", "?"),
+            "by hand" if self.meta.get("kind") == "manual" else "shot %s" % self.meta.get("shot", "?"),
             "%s" % end.get("reason", "incomplete"),
             "%d readings" % len(self.samples),
             "%.1f Hz" % self.rate(),
@@ -121,8 +132,11 @@ class Reader:
             if self.grind is not None:
                 self.finish("the previous grind was never finished")
             self.grind = Grind(fields(rest))
-            print("recording: shot %s, cup %s g" % (self.grind.meta.get("shot", "?"),
-                                                    self.grind.meta.get("cup_empty", "?")))
+            if self.grind.meta.get("kind") == "manual":
+                print("recording by hand, stop it with Ctrl-C")
+            else:
+                print("recording: shot %s, cup %s g" % (self.grind.meta.get("shot", "?"),
+                                                        self.grind.meta.get("cup_empty", "?")))
         elif self.grind is None or kind == "cols":
             return  # started in the middle of a grind, or the column names we already know
         elif kind == "d":
@@ -198,6 +212,8 @@ def main():
     parser.add_argument("--dir", default="logs", help="folder for the log files (logs)")
     parser.add_argument("--echo", action="store_true", help="also show the other serial output")
     parser.add_argument("--replay", help="read the lines from this file instead of the serial port")
+    parser.add_argument("--record", type=float, metavar="SECONDS", nargs="?", const=0.0,
+                        help="record without a grind for this long, 0 or no number: until Ctrl-C")
     args = parser.parse_args()
 
     os.makedirs(args.dir, exist_ok=True)
@@ -230,15 +246,33 @@ def main():
     connection.open()
     print("listening on %s at %d baud, the logs land in %s/ (stop with Ctrl-C)" % (port, args.baud, args.dir))
 
+    until = None
+    if args.record is not None:
+        connection.write(b"r") # tells the scale to record without waiting for a grind
+        until = time.monotonic() + args.record if args.record else None
+        print("recording without a grind%s"
+              % (", %g seconds" % args.record if args.record else ", until Ctrl-C"))
+
     try:
         while True:
             line = connection.readline()
             if line:
                 reader.line(line.decode("utf-8", errors="replace"))
+            if until is not None and time.monotonic() >= until:
+                break
     except KeyboardInterrupt:
-        reader.finish("stopped in the middle of a grind")
-        print("\n%d grinds recorded" % reader.count)
+        pass
     finally:
+        if args.record is not None:
+            connection.write(b"s") # ends the recording, the scale still sends its last second
+            connection.flush()
+            stop = time.monotonic() + 3
+            while reader.grind is not None and time.monotonic() < stop:
+                line = connection.readline()
+                if line:
+                    reader.line(line.decode("utf-8", errors="replace"))
+        reader.finish("stopped in the middle of a recording")
+        print("\n%d recordings written" % reader.count)
         connection.close()
     return 0
 
