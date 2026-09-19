@@ -106,9 +106,9 @@ HYSTERESIS_FLAT_FROM = 0.9 # flatness from which the harder conditions are used
 HYSTERESIS_GRAMS_FLAT = 0.05
 HYSTERESIS_READINGS_FLAT = 6
 
-# v03 makes a single step harder still: flach_v01 has to be at 1 and v02 has to land on the same step.
-# A difference of two steps or more is not affected, so while the weight races up the display follows
-# in 0.2 g instead of 0.1 g. And a shown value this close to zero for this many readings in a row is
+# v03 takes the value of v01 and steps like any other filter. Only in a moment where a single step is
+# due, the ordinary conditions are met, flach_v01 is at 1 and v02 would land on that same step does the
+# value come from v02 instead. And a shown value this close to zero for this many readings in a row is
 # shown as a plain zero - the weight itself is left alone, nothing is tared
 ZERO_V03_GRAMS = 0.2
 ZERO_V03_READINGS = 10
@@ -509,11 +509,11 @@ def derivative(times, values):
 
 
 def hysteresis_v03(values, soft_flat, detected_flat, other, step=DISPLAY_STEP):
-    """The hysteresis of v03, on the values of v01.
+    """The hysteresis of v03. It steps exactly like the ordinary one - nothing is blocked.
 
-    A single step needs everything the ordinary hysteresis needs, and on top of that a moment where
-    flat_v01 is at 1 and where v02 would land on that same step. A difference of two steps or more is
-    not affected, so a weight racing up is followed in 0.2 g steps instead of 0.1 g ones.
+    The only thing v03 does differently: where a single step is due, the ordinary conditions are met,
+    flat_v01 is at 1 and v02 would land on that same step, the value taken is the one of v02 and not the
+    one of v01.
 
     Whatever it ends up showing, a value within ZERO_V03_GRAMS of zero for ZERO_V03_READINGS readings in
     a row is shown as a plain zero. Only the display: the value behind it keeps whatever it had, so this
@@ -530,7 +530,7 @@ def hysteresis_v03(values, soft_flat, detected_flat, other, step=DISPLAY_STEP):
 
         delta = int(round(value / step)) - unit
         if delta >= 2 or delta <= -2:
-            unit += delta # more than one step, neither hysteresis applies
+            unit += delta # more than one step, the hysteresis does not apply
             pending = direction = 0
         elif delta == 0:
             pending = direction = 0
@@ -539,9 +539,12 @@ def hysteresis_v03(values, soft_flat, detected_flat, other, step=DISPLAY_STEP):
                 direction, pending = delta, 0
             pending += 1
             boundary = (unit + delta * 0.5) * step + delta * extra
-            agreed = detected_flat[index] >= 1.0 and int(round(other[index] / step)) == unit + delta
-            if agreed and (pending >= confirm or (value - boundary) * delta >= 0):
-                unit += delta
+            if pending >= confirm or (value - boundary) * delta >= 0:
+                # The step is made either way; the question is only whose value is behind it
+                if detected_flat[index] >= 1.0 and int(round(other[index] / step)) == unit + delta:
+                    unit = int(round(other[index] / step)) # from v02
+                else:
+                    unit += delta # from v01
                 pending = direction = 0
 
         shown = unit * step
