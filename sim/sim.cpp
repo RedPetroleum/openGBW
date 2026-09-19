@@ -152,6 +152,7 @@ static void step()
   if (simTime - lastReadingAt >= SIM_SCALE_READING_MS)
   {
     weightData.push(scaleWeight);
+    rawData.push(scaleWeight); // no filter in the simulator, both buffers get the same value
     scaleLastUpdatedAt = simTime;
     lastReadingAt = simTime;
   }
@@ -174,6 +175,7 @@ static void setup()
   scaleLastUpdatedAt = simTime;
   lastActivityAt = simTime;
   weightData.push(scaleWeight);
+  rawData.push(scaleWeight); // no filter in the simulator, both buffers get the same value
   lastReadingAt = simTime;
   step(); // replaces the welcome message with the main screen
 }

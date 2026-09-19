@@ -18,8 +18,16 @@ bool grindMode = true;        // Grinder mode: impulse (false) or continuous (tr
 bool grinderActive = false;   // Grinder state (on/off)
 unsigned int shotCount;  
 
-// The last readings of the scale, what the Weight Data of the Debug Menu draws
+// The last readings of the scale, what the Weight Data of the Debug Menu draws. Filtered, so this is
+// what the weight IS
 MathBuffer<double, WEIGHT_DATA_SIZE> weightData;
+
+// The same readings unfiltered, straight from the load cell. Whether the scale is standing still is
+// asked of these and not of the filtered ones: filter v01 lays a line through its window and reads it
+// off at the newest reading, so it delivers a smooth value even where the readings underneath scatter
+// wildly - a scale that is not at rest at all would pass a steadiness check on the filtered signal.
+// The filter says what the weight is, the raw readings say whether it is moving
+MathBuffer<double, WEIGHT_DATA_SIZE> rawData;
 
 // Last finished grinds, newest first
 GrindRecord grindHistory[GRIND_HISTORY_SIZE];
@@ -494,6 +502,7 @@ void updateScale(void *parameter) {
                 }
                 double grams = (raw - loadcell.get_offset()) / (double)loadcell.get_scale();
                 grindLogSample(raw, grams);
+                rawData.push(grams); // unfiltered, for the steadiness checks
                 sum += grams;
                 taken++;
 #if FILTER_FAST
@@ -669,23 +678,37 @@ void abortGrinding(const char *reason) {
     failGrinding(reason, true);
 }
 
-// True when the last `readings` weights lie within `tolerance` of each other and all of them around
-// the given cup weight - the cup is standing on the scale and the reading has settled, so the empty
-// cup is weighed accurately. Both ends are checked against the cup weight, everything else lies
-// between them
+// One of the two steadiness rules on the raw readings: the last `readings` of them within `tolerance`.
+// Writes their lowest and highest, which the cup detection checks against the cup weight as well
+static bool rawSteady(size_t readings, double tolerance, double &lowest, double &highest) {
+    return rawData.spreadOfLast(readings, lowest, highest) && highest - lowest <= tolerance;
+}
+
+// True where the scale is standing still and, on top of that, at least `readings` of the raw readings
+// it judges that by were taken after `since` - for the dose, where everything from before the dead
+// time says nothing. `since` of 0 asks nothing of the kind. See config.hpp for the two rules
+static bool scaleSteady(unsigned long since) {
+    double lowest = 0, highest = 0;
+    size_t usable = since == 0 ? rawData.capacity : rawData.countSamplesSince(since);
+    return (usable >= STEADY_READINGS_SHORT &&
+            rawSteady(STEADY_READINGS_SHORT, STEADY_TOLERANCE_SHORT, lowest, highest)) ||
+           (usable >= STEADY_READINGS_LONG &&
+            rawSteady(STEADY_READINGS_LONG, STEADY_TOLERANCE_LONG, lowest, highest));
+}
+
+// The same two rules with the cup weight on top: the readings stand still and all of them lie around
+// the given cup weight, so the cup is standing on the scale and its empty weight can be taken. Both
+// ends are checked against the cup weight, everything else lies between them
 static bool cupResting(double cupWeight, size_t readings, double tolerance) {
     double lowest = 0, highest = 0;
-    return weightData.spreadOfLast(readings, lowest, highest) && highest - lowest <= tolerance &&
+    return rawSteady(readings, tolerance, lowest, highest) &&
            ABS(lowest - cupWeight) < CUP_DETECTION_TOLERANCE && ABS(highest - cupWeight) < CUP_DETECTION_TOLERANCE;
 }
 
-// Checks if the given cup is resting on the scale. Any of the three pairs of readings and tolerance
-// is enough: the tight one needs a second and a half of readings that hardly move at all, the two
-// looser ones half a second and a second of readings that wander a little more, see config.hpp
+// Checks if the given cup is resting on the scale, either rule is enough
 bool isCupDetected(double cupWeight) {
-    return cupResting(cupWeight, STEADY_READINGS, STEADY_TOLERANCE) ||
-           cupResting(cupWeight, STEADY_READINGS_SHORT, STEADY_TOLERANCE_SHORT) ||
-           cupResting(cupWeight, STEADY_READINGS_MEDIUM, STEADY_TOLERANCE_MEDIUM);
+    return cupResting(cupWeight, STEADY_READINGS_SHORT, STEADY_TOLERANCE_SHORT) ||
+           cupResting(cupWeight, STEADY_READINGS_LONG, STEADY_TOLERANCE_LONG);
 }
 
 // Task to manage the status of the scale
@@ -820,12 +843,11 @@ void scaleStatusLoop(void *p) {
                     break;
                 }
                 double dose = currentWeight - cupWeightEmpty;
-                // The dose is reached once the readings have settled - STEADY_READINGS_MEDIUM of them
-                // in a row no further than STEADY_TOLERANCE_MEDIUM apart - and the value they settled
-                // on is a plausible dose. A steady reading alone is not enough: a cup put down again or
-                // a hand resting on the scale is just as steady, and it must not be taken for the dose
-                bool settled = weightData.countSamplesSince(verifyingFrom) >= STEADY_READINGS_MEDIUM &&
-                               weightData.isSteady(STEADY_READINGS_MEDIUM, STEADY_TOLERANCE_MEDIUM);
+                // The dose is reached once the raw readings stand still by the same two rules the cup
+                // detection uses - and the value they settled on is a plausible dose. Steadiness alone
+                // is not enough: a cup put down again or a hand resting on the scale is just as steady,
+                // and it must not be taken for the dose
+                bool settled = scaleSteady(verifyingFrom);
                 bool plausible = ABS(dose - setWeight) <= DOSE_PLAUSIBLE_GRAMS;
                 if (!settled || !plausible) {
                     // Whatever is on the scale after FINISHED_MAX_WAIT is not a dose this grind can

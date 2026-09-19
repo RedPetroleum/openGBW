@@ -155,33 +155,25 @@ extern bool debugMode;
 #define CUP_WEIGHT 396.1 //war 292
 #define CUP_WEIGHT_2 76.3 // second cup
 #define CUP_DETECTION_TOLERANCE 10 // 5 grams tolerance above or bellow cup weight to detect it
-// v01 and v02 deliver a weight for every reading of the HX711, the old filter only for every fifth one,
-// so everything that counts readings instead of time has to be five times as much
-#if FILTER_FAST
-#define STEADY_READINGS 15 // this many readings in a row ...
-#else
-#define STEADY_READINGS 3
-#endif
-#define STEADY_TOLERANCE 0.1 // ... within this many grams of each other mean the reading has settled
-
-// Two looser pairs of the same kind: fewer readings, but more room between the lowest and the highest
-// of them. They are enough for the cup detection as well, so a cup does not have to lie still for a
-// second and a half before the grinder starts - half a second of readings that do not wander more
-// than SHORT_TOLERANCE is a cup standing on the scale just as much. The middle pair also decides when
-// the dose may be measured after grinding
-#if FILTER_FAST
-#define STEADY_READINGS_SHORT 5   // half a second at 10 Hz ...
-#define STEADY_READINGS_MEDIUM 10 // ... and a whole one
-#define STEADY_TOLERANCE_SHORT 0.6
-#define STEADY_TOLERANCE_MEDIUM 0.7
-#else
-// The old filter delivers a weight only twice a second, where five readings are two and a half
-// seconds - there the tight pair stays the only one
-#define STEADY_READINGS_SHORT STEADY_READINGS
-#define STEADY_READINGS_MEDIUM STEADY_READINGS
-#define STEADY_TOLERANCE_SHORT STEADY_TOLERANCE
-#define STEADY_TOLERANCE_MEDIUM STEADY_TOLERANCE
-#endif
+// Whether the scale is standing still. Two rules, and either of them on its own is enough:
+//
+//     STEADY_READINGS_SHORT readings within STEADY_TOLERANCE_SHORT   - a scale that has come to rest
+//     STEADY_READINGS_LONG readings within STEADY_TOLERANCE_LONG     - one that keeps rustling a little
+//
+// The same two decide whether a cup is standing on the scale and whether the dose has settled after
+// grinding, so both answers come from the same idea of "not moving". The difference between the two is
+// only what else has to be true: for a cup the readings must also lie around the cup weight, for the
+// dose they must all have been taken after the dead time.
+//
+// They look at the raw readings, which arrive at the full 10 Hz of the HX711 whatever the filter does -
+// the filter lays a line through its window and would report a smooth value even where the readings
+// underneath scatter, so a scale that is not at rest at all would pass. Spread is the difference
+// between the lowest and the highest of the window, so it cannot add up over the readings: they all
+// have to fit into a band of that width
+#define STEADY_READINGS_SHORT 10 // one second at 10 Hz ...
+#define STEADY_TOLERANCE_SHORT 0.5
+#define STEADY_READINGS_LONG 20  // ... and two seconds
+#define STEADY_TOLERANCE_LONG 0.7
 
 #define LOADCELL_DOUT_PIN 19
 #define LOADCELL_SCK_PIN 18
@@ -298,6 +290,7 @@ extern unsigned int shotCount;
 extern int debugMenuItemsCount;
 extern int currentDebugMenuItem;
 extern MathBuffer<double, WEIGHT_DATA_SIZE> weightData;
+extern MathBuffer<double, WEIGHT_DATA_SIZE> rawData; // the same readings unfiltered
 extern GrindRecord grindHistory[GRIND_HISTORY_SIZE];
 extern int grindHistoryCount;
 extern int grindHistoryScroll;
