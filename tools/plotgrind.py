@@ -540,12 +540,14 @@ def hysteresis_v03(values, soft_flat, detected_flat, other, step=DISPLAY_STEP):
             pending += 1
             boundary = (unit + delta * 0.5) * step + delta * extra
             if pending >= confirm or (value - boundary) * delta >= 0:
-                # The step is made either way; the question is only whose value is behind it
-                if detected_flat[index] >= 1.0 and int(round(other[index] / step)) == unit + delta:
-                    unit = int(round(other[index] / step)) # from v02
-                else:
-                    unit += delta # from v01
-                pending = direction = 0
+                if detected_flat[index] < 1.0:
+                    unit += delta # the weight is moving, the display has to follow v01
+                    pending = direction = 0
+                elif int(round(other[index] / step)) == unit + delta:
+                    unit = int(round(other[index] / step)) # lying flat and v02 agrees: the step is real
+                    pending = direction = 0
+                # Lying flat and v02 still on the old step: no step. `pending` is kept, so the moment
+                # v02 comes along the step is made without waiting for the conditions again
 
         shown = unit * step
         zeros = zeros + 1 if abs(shown) <= ZERO_V03_GRAMS else 0
