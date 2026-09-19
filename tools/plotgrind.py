@@ -28,14 +28,18 @@ from grindlog import load  # noqa: E402
 # Colors of the data visualisation reference palette, slots 1 to 3, unchanged: they are validated for
 # colour vision deficiency over all pairs. Light and dark are the same hues stepped for their surface
 LIGHT = dict(surface="#fcfcfb", text="#0b0b0b", muted="#52514e", grid="#e8e7e3", rule="#b5b3ad",
-             series=("#2a78d6", "#eb6834", "#1baf7a"), new="#4a3aa7", sigma="#e34948", trained="#0b0b0b")
+             series=("#2a78d6", "#eb6834", "#1baf7a"), new="#4a3aa7", sigma="#e34948", grind="#008300",
+             trained="#0b0b0b")
 DARK = dict(surface="#1a1a19", text="#ffffff", muted="#c3c2b7", grid="#302f2d", rule="#6b6a65",
-            series=("#3987e5", "#d95926", "#199e70"), new="#9085e9", sigma="#e66767", trained="#ffffff")
+            series=("#3987e5", "#d95926", "#199e70"), new="#9085e9", sigma="#e66767", grind="#008300",
+            trained="#ffffff")
 
 REFERENCE_WINDOW = 9 # readings of the centred average that serves as the true course of the weight
 STANDING_BELOW = 0.05 # g/s, a true change this small means the scale was standing
 MOVING_ABOVE = 0.5    # g/s, this large means it was moving; in between is neither
 STANDING_LOOK = 5     # readings to each side the true change is taken over
+
+MOST_GRID_LINES = 400 # more lines than this in the grid are a grey area, not a grid
 
 MARK_LABELS = {"grinder_on": "Grinder an", "grinder_off": "Grinder aus", "stop": "verifiziert"}
 
@@ -173,6 +177,85 @@ def learned_flatness(recent, slope=0.0):
         part = recent[-window:]
         z += weight * (statistics.stdev(part) if len(part) >= max(2, window) else LEARNED_UNKNOWN)
     return 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, z))))
+
+
+# The three detectors of v01, all of them on the raw readings and all of them between 0 and 1
+FLAT_V01_LONG = 10   # readings that have to lie within FLAT_V01_TIGHT for the full 1
+FLAT_V01_SHORT = 5   # ... the fewest that are looked at at all, they give FLAT_V01_FEW
+FLAT_V01_FEW = 0.8
+FLAT_V01_TIGHT = 0.7 # g
+FLAT_V01_WIDE = 1.2  # g, at this spread over the short window it is down to FLAT_V01_LOOSE
+FLAT_V01_LOOSE = 0.5
+
+PLACED_V01_GRAMS = 1.0 # g, a step of more than this between two readings
+
+GRIND_V01_CORE = (0.5, 3.5) # g/s, in here the full value is possible
+GRIND_V01_WIDE = (0.4, 4.0) # g/s, outside of this it is nothing, in between it fades
+GRIND_V01_LONG = 20  # readings over which the rate has to hold for the full 1
+GRIND_V01_SHORT = 5  # ... the fewest, they give GRIND_V01_FEW
+GRIND_V01_FEW = 0.5
+
+
+def flat_v01(recent):
+    """How flat it lies, from the spread of the readings.
+
+    Ten readings within 0.7 g are the full 1, five within 0.7 g are 0.8, and between those two it is
+    interpolated over how many readings still hold. Five readings within 1.2 g are 0.5, and between
+    0.7 and 1.2 g it is interpolated over the spread. Wider than that, or fewer than five readings, is 0.
+    """
+    if len(recent) < FLAT_V01_SHORT:
+        return 0.0
+    span = lambda count: max(recent[-count:]) - min(recent[-count:])
+
+    short = span(FLAT_V01_SHORT)
+    if short > FLAT_V01_WIDE:
+        return 0.0
+    if short > FLAT_V01_TIGHT: # between the two spreads, interpolated over the grams
+        share = (short - FLAT_V01_TIGHT) / (FLAT_V01_WIDE - FLAT_V01_TIGHT)
+        return FLAT_V01_FEW - share * (FLAT_V01_FEW - FLAT_V01_LOOSE)
+
+    count = FLAT_V01_SHORT # how far back the readings still lie within the tight spread
+    while count < min(FLAT_V01_LONG, len(recent)) and span(count + 1) <= FLAT_V01_TIGHT:
+        count += 1
+    share = (count - FLAT_V01_SHORT) / (FLAT_V01_LONG - FLAT_V01_SHORT)
+    return FLAT_V01_FEW + share * (1.0 - FLAT_V01_FEW)
+
+
+def placed_v01(previous, value):
+    """Something was put on or taken off: a step of more than PLACED_V01_GRAMS from one reading to the next"""
+    return 1.0 if abs(value - previous) > PLACED_V01_GRAMS else 0.0
+
+
+def grinding_rate_share(rate):
+    """1 inside the core range, fading to 0 at the edges of the wide one, 0 outside it"""
+    low, high = GRIND_V01_WIDE
+    core_low, core_high = GRIND_V01_CORE
+    if rate <= low or rate >= high:
+        return 0.0
+    if rate < core_low:
+        return (rate - low) / (core_low - low)
+    if rate > core_high:
+        return (high - rate) / (high - core_high)
+    return 1.0
+
+
+def grinding_v01(times, recent):
+    """Coffee is falling: the weight is rising at a rate a grinder produces, and has been for a while.
+
+    Built like flat_v01, only over the rate instead of the spread: the rate of the last `count` readings
+    is taken from a straight line through them, and the longer a window still shows a rate in the range,
+    the higher the value - 20 readings give 1, five give 0.5. Between the core range and the wide one the
+    value fades, but it never drops below 0.5: either it is at least that, or it is nothing at all.
+    """
+    best = 0.0
+    for count in range(min(GRIND_V01_LONG, len(recent)), FLAT_V01_SHORT - 1, -1):
+        if count < GRIND_V01_SHORT:
+            break
+        share = grinding_rate_share(line_at_end(times[-count:], recent[-count:])[2])
+        if share > 0:
+            reach = (count - GRIND_V01_SHORT) / (GRIND_V01_LONG - GRIND_V01_SHORT)
+            best = max(best, GRIND_V01_FEW + reach * (1.0 - GRIND_V01_FEW) * share)
+    return best
 
 
 def slope_flatness(recent, slope):
@@ -394,13 +477,21 @@ def style(theme):
 
 
 def event_lines(axis, marks, theme, label=True):
-    for mark in marks:
-        name = mark["text"].split()[0]
-        axis.axvline(mark["t_ms"] / 1000.0, color=theme["rule"], linewidth=0.7, zorder=1)
-        if label:
-            axis.annotate(MARK_LABELS.get(name, name), (mark["t_ms"] / 1000.0, 0.0),
-                          xycoords=("data", "axes fraction"), xytext=(3, 4), textcoords="offset points",
-                          color=theme["muted"], fontsize=8)
+    """The events as vertical lines. A recording by hand can carry a whole grind with its markers, so
+    labels that would sit on top of each other are put on two rows"""
+    previous = None
+    row = 0
+    for mark in sorted(marks, key=lambda m: m["t_ms"]):
+        when = mark["t_ms"] / 1000.0
+        axis.axvline(when, color=theme["rule"], linewidth=0.7, zorder=1)
+        if not label:
+            continue
+        span = axis.get_xlim()[1] - axis.get_xlim()[0]
+        row = 0 if previous is None or when - previous > span / 8 else 1 - row
+        previous = when
+        axis.annotate(MARK_LABELS.get(mark["text"].split()[0], mark["text"].split()[0]), (when, 0.0),
+                      xycoords=("data", "axes fraction"), xytext=(3, 4 + row * 10),
+                      textcoords="offset points", color=theme["muted"], fontsize=8)
 
 
 def unit(net, raw):
@@ -416,6 +507,12 @@ def grid(axis, theme, step, sf):
     from matplotlib.ticker import MultipleLocator
 
     fine = step * sf if sf else step # in counts when the raw values are drawn
+    # A recording of a whole cup being put on spans hundreds of grams, and a line every 0.1 g would be
+    # thousands of them - matplotlib refuses that, and it would be a grey area anyway. Ten times coarser
+    # each time until they are far enough apart to be lines
+    low, high = axis.get_ylim()
+    while fine > 0 and (high - low) / fine > MOST_GRID_LINES:
+        fine *= 10
     axis.yaxis.set_minor_locator(MultipleLocator(fine))
     axis.yaxis.set_major_locator(MultipleLocator(fine * 10))
     axis.grid(axis="y", which="major", color=theme["grid"], linewidth=0.8)
@@ -450,8 +547,8 @@ def plot_grind(log, theme, path, show, net, raw, step, flat):
     meta, marks, end, samples = log
     t, values = series(log, net, raw)
 
-    figure, (axis, below) = plt.subplots(2, 1, figsize=(10, 6.2), sharex=True,
-                                         gridspec_kw=dict(height_ratios=[4, 1]),
+    figure, (axis, below) = plt.subplots(2, 1, figsize=(10, 7), sharex=True,
+                                         gridspec_kw=dict(height_ratios=[3, 1.6]),
                                          constrained_layout=True)
     if meta.get("kind") == "manual":
         title = "Aufnahme von Hand  -  %.1f s, %d Messungen" % (t[-1] - t[0], len(samples))
@@ -512,14 +609,25 @@ def plot_grind(log, theme, path, show, net, raw, step, flat):
                 below.fill_between(t[run:index], height[0], height[1], color=theme["muted"],
                                    linewidth=0, zorder=2)
                 run = None
-    below.plot(t, strength, linewidth=0.7, color=shading[0], drawstyle="steps-post", zorder=3)
-    below.axhline(HYSTERESIS_FLAT_FROM, color=theme["rule"], linewidth=0.7, zorder=1)
-    below.set_title("flach erkannt (%s)  -  härtere Hysterese ab der Linie bei %.1f, "
-                    "Balken oben und unten: wirklich gestanden bzw. bewegt"
-                    % (shading[1], HYSTERESIS_FLAT_FROM), loc="left", color=theme["muted"])
+    # The three detectors of v01, each on the raw readings
+    longest = max(FLAT_V01_LONG, GRIND_V01_LONG)
+    flat, placed, grinding = [], [], []
+    for index in range(len(values)):
+        recent = values[max(0, index - longest + 1):index + 1]
+        flat.append(flat_v01(recent))
+        placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
+        grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent))
+    for curve, color, label in ((flat, theme["new"], "flach_v01"),
+                                (placed, theme["sigma"], "aufsetzen_v01"),
+                                (grinding, theme["grind"], "mahlen_v01")):
+        below.plot(t, curve, linewidth=0.7, color=color, drawstyle="steps-post", zorder=3, label=label)
+    # Above the panel, otherwise it sits on the curves, which spend much of their time at 0 and at 1
+    below.legend(loc="lower right", bbox_to_anchor=(1, 1.0), ncol=3, borderaxespad=0.3)
+    below.set_title("Erkennung v01  -  Balken: wirklich gestanden bzw. bewegt",
+                    loc="left", color=theme["muted"])
     below.set_ylim(0, 1)
     below.set_yticks((0, 0.5, 1))
-    below.set_ylabel("flach")
+    below.set_ylabel("Erkennung")
     below.set_xlabel("Zeit seit Aufnahmestart (s)" if meta.get("kind") == "manual"
                      else "Zeit seit Cup-Erkennung (s)")
     below.grid(axis="y", color=theme["grid"], linewidth=0.6)
