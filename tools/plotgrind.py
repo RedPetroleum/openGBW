@@ -113,6 +113,12 @@ HYSTERESIS_READINGS_FLAT = 6
 ZERO_V03_GRAMS = 0.2
 ZERO_V03_READINGS = 10
 
+# Taking a heavy weight off makes the scale swing through zero and hang in the negative for a moment.
+# A small negative shown value is therefore held at zero until it has reached NEGATIVE_V03_GRAMS or
+# NEGATIVE_V03_READINGS readings in a row have all been negative
+NEGATIVE_V03_GRAMS = 0.5
+NEGATIVE_V03_READINGS = 5
+
 
 def kalman(values, err_measure, err_estimate, q):
     """SimpleKalmanFilter of the firmware, line by line as in the library (denyssene/SimpleKalmanFilter).
@@ -511,6 +517,22 @@ def derivative(times, values):
     return out
 
 
+def hold_negative(shown, negatives, released, step=DISPLAY_STEP):
+    """Holds a small negative shown value at zero, see NEGATIVE_V03_GRAMS.
+
+    Takes the stepped value, how many readings in a row have been negative so far and whether the hold
+    has already let go; returns what the display shows and both of them again. The counting runs on the
+    real stepped value, so the display jumps to it the moment the hold ends, and once the value is out
+    it stays out until the weight is back at zero - otherwise the display flickers between the two.
+    """
+    if shown > -step / 2:
+        return shown, 0, False
+    negatives += 1
+    if shown <= -NEGATIVE_V03_GRAMS + step / 2 or negatives >= NEGATIVE_V03_READINGS:
+        released = True
+    return (shown if released else 0.0), negatives, released
+
+
 def hysteresis_v03(values, soft_flat, flat_decided, other, step=DISPLAY_STEP):
     """The hysteresis of v03. It steps exactly like the ordinary one - nothing is blocked.
 
@@ -519,13 +541,14 @@ def hysteresis_v03(values, soft_flat, flat_decided, other, step=DISPLAY_STEP):
     and the value then comes from v02. Lying flat with v02 still on the old step, no step is made.
 
     Whatever it ends up showing, a value within ZERO_V03_GRAMS of zero for ZERO_V03_READINGS readings in
-    a row is shown as a plain zero. Only the display: the value behind it keeps whatever it had, so this
-    is not a tare and nothing drifts away.
+    a row is shown as a plain zero, and a small negative value is held at zero by hold_negative(). Only
+    the display: the value behind it keeps whatever it had, so this is not a tare and nothing drifts
+    away.
     """
     if not values:
         return []
     out, unit = [], int(round(values[0] / step))
-    pending, direction, zeros = 0, 0, 0
+    pending, direction, zeros, negatives, released = 0, 0, 0, 0, False
     for index, value in enumerate(values):
         strict = soft_flat[index] >= HYSTERESIS_FLAT_FROM
         extra = HYSTERESIS_GRAMS_FLAT if strict else HYSTERESIS_GRAMS
@@ -552,7 +575,7 @@ def hysteresis_v03(values, soft_flat, flat_decided, other, step=DISPLAY_STEP):
                 # Lying flat and v02 still on the old step: no step. `pending` is kept, so the moment
                 # v02 comes along the step is made without waiting for the conditions again
 
-        shown = unit * step
+        shown, negatives, released = hold_negative(unit * step, negatives, released, step)
         zeros = zeros + 1 if abs(shown) <= ZERO_V03_GRAMS else 0
         out.append(0.0 if zeros >= ZERO_V03_READINGS else shown)
     return out

@@ -131,6 +131,14 @@ extern bool debugMode;
 #define ZERO_V03_GRAMS 0.2    // a shown value this close to zero ...
 #define ZERO_V03_READINGS 10  // ... for this many readings in a row is shown as a plain zero
 
+// Taking a heavy weight off makes the scale swing through zero and hang in the negative for a moment,
+// which has nothing to do with the cup being lighter than the zero point. A small negative value is
+// therefore held at zero: it is only shown once it has reached NEGATIVE_V03_GRAMS, or once
+// NEGATIVE_V03_READINGS readings in a row have all been negative. The display only, the weight behind
+// it is untouched, and the moment the hold ends the true value appears at once
+#define NEGATIVE_V03_GRAMS 0.5   // g below zero which is shown straight away ...
+#define NEGATIVE_V03_READINGS 5  // ... or this many negative readings in a row
+
 // The shown weight steps in DISPLAY_STEP grams. A step of one is only taken when the weight is
 // HYSTERESIS_GRAMS past the middle between two steps, or when HYSTERESIS_READINGS readings in a row all
 // want the same step; a difference of two steps or more is taken over as it is. Where the filter has

@@ -329,10 +329,30 @@ static bool v03Detect(double grams, unsigned long at, double previous) {
                        grindingV01(change));
 }
 
+// Holds a small negative shown value at zero, see config.hpp. The counting runs on the real stepped
+// value, so the display jumps to it the moment the hold ends
+static double holdNegative(double shown) {
+    static int negatives = 0;
+    static bool released = false;
+    if (shown > -DISPLAY_STEP / 2) {
+        negatives = 0;
+        released = false;
+        return shown; // zero or above, nothing to hold and the hold is armed again
+    }
+    negatives++;
+    // Deep enough, or negative long enough to be a real weight - and once it is out, it stays out
+    // until the weight is back at zero, otherwise the display flickers between the value and zero
+    if (shown <= -NEGATIVE_V03_GRAMS + DISPLAY_STEP / 2 || negatives >= NEGATIVE_V03_READINGS) {
+        released = true;
+    }
+    return released ? shown : 0.0;
+}
+
 // The display of v03: it steps like the ordinary hysteresis while the weight moves, but where the
 // detectors say it lies flat, a single step also needs v02 to land on that same step. And a shown value
-// within ZERO_V03_GRAMS of zero for ZERO_V03_READINGS readings in a row is shown as a plain zero -
-// the display only, the weight behind it is untouched and nothing is tared
+// within ZERO_V03_GRAMS of zero for ZERO_V03_READINGS readings in a row is shown as a plain zero, and
+// a small negative value is held at zero by holdNegative() - the display only, the weight behind it is
+// untouched and nothing is tared
 static void updateShownV03(double value, double other, double softFlat, bool flat) {
     static int units = 0, pending = 0, direction = 0, zeros = 0;
     static bool started = false;
@@ -372,7 +392,7 @@ static void updateShownV03(double value, double other, double softFlat, bool fla
         }
     }
 
-    double shown = units * DISPLAY_STEP;
+    double shown = holdNegative(units * DISPLAY_STEP);
     zeros = ABS(shown) <= ZERO_V03_GRAMS ? zeros + 1 : 0;
     shownWeight = zeros >= ZERO_V03_READINGS ? 0.0 : shown;
 }
