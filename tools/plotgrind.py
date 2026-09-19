@@ -180,7 +180,7 @@ def learned_flatness(recent, slope=0.0):
 
 
 # The three detectors of v01, all of them on the raw readings and all of them between 0 and 1
-FLAT_V01_LONG = 10   # readings that have to lie within FLAT_V01_TIGHT for the full 1
+FLAT_V01_LONG = 20   # readings that have to lie within FLAT_V01_TIGHT for the full 1
 FLAT_V01_SHORT = 5   # ... the fewest that are looked at at all, they give FLAT_V01_FEW
 FLAT_V01_FEW = 0.8
 FLAT_V01_TIGHT = 0.7 # g
@@ -194,6 +194,8 @@ GRIND_V01_WIDE = (0.4, 6.0) # g/s, outside of this it is nothing, in between it 
 GRIND_V01_LONG = 20  # readings over which the rate has to hold for the full 1
 GRIND_V01_SHORT = 5  # ... the fewest, they give GRIND_V01_FEW
 GRIND_V01_FEW = 0.5
+GRIND_V01_QUIET = 1.0 # g/s, below this rate a value under GRIND_V01_SURE is not grinding at all
+GRIND_V01_SURE = 0.6
 
 AVERAGE_PANEL = 15  # readings the third panel averages the weight over
 CHANGE_MOST = 10.0  # g/s, the third panel shows no more than this - a cup being put on is hundreds
@@ -202,7 +204,7 @@ CHANGE_MOST = 10.0  # g/s, the third panel shows no more than this - a cup being
 def flat_v01(recent):
     """How flat it lies, from the spread of the readings.
 
-    Ten readings within 0.7 g are the full 1, five within 0.7 g are 0.8, and between those two it is
+    Twenty readings within 0.7 g are the full 1, five within 0.7 g are 0.8, and between those two it is
     interpolated over how many readings still hold. Five readings within 1.2 g are 0.5, and between
     0.7 and 1.2 g it is interpolated over the spread. Wider than that, or fewer than five readings, is 0.
     """
@@ -242,13 +244,17 @@ def grinding_rate_share(rate):
     return 1.0
 
 
-def grinding_v01(times, recent):
+def grinding_v01(times, recent, change):
     """Coffee is falling: the weight is rising at a rate a grinder produces, and has been for a while.
 
     Built like flat_v01, only over the rate instead of the spread: the rate of the last `count` readings
     is taken from a straight line through them, and the longer a window still shows a rate in the range,
     the higher the value - 20 readings give 1, five give 0.5. Between the core range and the wide one the
     value fades, but it never drops below 0.5: either it is at least that, or it is nothing at all.
+
+    `change` is how fast the weight is really moving, from the derivative of the moving average. Where
+    that is below GRIND_V01_QUIET and the value has not made it past GRIND_V01_SURE, nothing is grinding
+    and the answer is 0 - a rate that a few readings happen to show is not a grinder running.
     """
     best = 0.0
     for count in range(min(GRIND_V01_LONG, len(recent)), FLAT_V01_SHORT - 1, -1):
@@ -258,7 +264,7 @@ def grinding_v01(times, recent):
         if share > 0:
             reach = (count - GRIND_V01_SHORT) / (GRIND_V01_LONG - GRIND_V01_SHORT)
             best = max(best, GRIND_V01_FEW + reach * (1.0 - GRIND_V01_FEW) * share)
-    return best
+    return 0.0 if change < GRIND_V01_QUIET and best < GRIND_V01_SURE else best
 
 
 def slope_flatness(recent, slope):
@@ -608,14 +614,17 @@ def plot_grind(log, theme, path, show, net, raw, step):
                 below.fill_between(t[run:index], height[0], height[1], color=theme["muted"],
                                    linewidth=0, zorder=2)
                 run = None
-    # The three detectors of v01, each on the raw readings
+    # The three detectors of v01, each on the raw readings; grinding also needs how fast the weight
+    # really moves, which is what the third panel draws
+    average = moving_average(t, values, AVERAGE_PANEL)[1]
+    change = derivative(t, average)
     longest = max(FLAT_V01_LONG, GRIND_V01_LONG)
     flat, placed, grinding = [], [], []
     for index in range(len(values)):
         recent = values[max(0, index - longest + 1):index + 1]
         flat.append(flat_v01(recent))
         placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
-        grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent))
+        grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent, change[index]))
 
     for curve, color, label in ((flat, theme["new"], "flach_v01"),
                                 (placed, theme["sigma"], "aufsetzen_v01"),
@@ -625,8 +634,7 @@ def plot_grind(log, theme, path, show, net, raw, step):
         below.fill_between(t, 0, curve, step="post", color=color, alpha=0.12, linewidth=0, zorder=2)
 
     # The moving average itself is not drawn, only how fast it changes
-    average = moving_average(t, values, AVERAGE_PANEL)[1]
-    changing.plot(t, derivative(t, average), linewidth=0.7, color=theme["series"][0],
+    changing.plot(t, change, linewidth=0.7, color=theme["series"][0],
                   drawstyle="steps-post", zorder=3)
     changing.axhline(0, color=theme["rule"], linewidth=0.7, zorder=1)
     # Above the panel, otherwise it sits on the curves, which spend much of their time at 0 and at 1
@@ -643,7 +651,6 @@ def plot_grind(log, theme, path, show, net, raw, step):
                        loc="left", color=theme["muted"])
     changing.set_ylabel("Änderung (g/s)")
     # Capped: putting a cup on produces hundreds of g/s and would flatten everything else to a line
-    change = derivative(t, average)
     low, high = min(change), max(change)
     changing.set_ylim(max(-CHANGE_MOST, low - 0.5), min(CHANGE_MOST, high + 0.5))
     changing.grid(axis="y", color=theme["grid"], linewidth=0.6)
