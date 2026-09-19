@@ -278,6 +278,32 @@ def grinding_v01(times, recent, change):
     return 0.0 if change < GRIND_V01_QUIET and best < GRIND_V01_SURE else best
 
 
+DECIDED_V01_ALONE = 0.8 # a detector this high wins when the other two are at zero
+
+
+def decide_v02(flat, placed, grinding):
+    """Turns the three detectors into one answer: at most one of them is 1, the others are 0.
+
+    A detector has to be at 1 to win, or at DECIDED_V01_ALONE when the other two are at zero. Grinding
+    beats something being put on when both are at 1 - a clump of grounds landing is still grinding.
+    Any other tie between two of them is no answer at all, and then all three are 0.
+    """
+    named = (("flach", flat), ("aufsetzen", placed), ("mahlen", grinding))
+    full = [name for name, value in named if value >= 1.0]
+
+    if len(full) == 1:
+        winner = full[0]
+    elif set(full) == {"mahlen", "aufsetzen"}:
+        winner = "mahlen"
+    elif full:
+        winner = None # several at once, and not the pair that has a rule: no answer
+    else:
+        strong = [name for name, value in named if value >= DECIDED_V01_ALONE]
+        others = lambda winner: all(value == 0 for name, value in named if name != winner)
+        winner = strong[0] if len(strong) == 1 and others(strong[0]) else None
+    return tuple(1.0 if name == winner else 0.0 for name, _ in named)
+
+
 def slope_flatness(recent, slope):
     """How horizontal the trend is, from the slope of the line through the window"""
     return max(0.0, 1.0 - abs(slope) / FLAT_SLOPE)
@@ -578,9 +604,9 @@ def plot_grind(log, theme, path, show, net, raw, step):
     meta, marks, end, samples = log
     t, values = series(log, net, raw)
 
-    figure, (axis, below, changing) = plt.subplots(3, 1, figsize=(10, 8.4), sharex=True,
-                                                   gridspec_kw=dict(height_ratios=[3, 1.6, 1.6]),
-                                                   constrained_layout=True)
+    figure, (axis, below, decided, changing) = plt.subplots(
+        4, 1, figsize=(10, 10), sharex=True,
+        gridspec_kw=dict(height_ratios=[3, 1.6, 1.6, 1.6]), constrained_layout=True)
     if meta.get("kind") == "manual":
         title = "Aufnahme von Hand  -  %.1f s, %d Messungen" % (t[-1] - t[0], len(samples))
     else:
@@ -637,12 +663,16 @@ def plot_grind(log, theme, path, show, net, raw, step):
         placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
         grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent, change[index]))
 
-    for curve, color, label in ((flat, theme["new"], "flach_v01"),
-                                (placed, theme["sigma"], "aufsetzen_v01"),
-                                (grinding, theme["grind"], "mahlen_v01")):
-        below.plot(t, curve, linewidth=0.7, color=color, drawstyle="steps-post", zorder=3, label=label)
-        # Lightly filled underneath, so three curves that share the 0 and the 1 can still be told apart
-        below.fill_between(t, 0, curve, step="post", color=color, alpha=0.12, linewidth=0, zorder=2)
+    result = [decide_v02(*three) for three in zip(flat, placed, grinding)]
+    colors = (theme["new"], theme["sigma"], theme["grind"])
+    names = ("flach", "aufsetzen", "mahlen")
+    for index, (curve, color, name) in enumerate(zip((flat, placed, grinding), colors, names)):
+        for panel, drawn, suffix in ((below, curve, "v01"),
+                                     (decided, [one[index] for one in result], "v02")):
+            panel.plot(t, drawn, linewidth=0.7, color=color, drawstyle="steps-post", zorder=3,
+                       label="%s_%s" % (name, suffix))
+            # Lightly filled, so three curves that share the 0 and the 1 can still be told apart
+            panel.fill_between(t, 0, drawn, step="post", color=color, alpha=0.12, linewidth=0, zorder=2)
 
     # The moving average itself is not drawn, only how fast it changes
     changing.plot(t, change, linewidth=0.7, color=theme["series"][0],
@@ -652,11 +682,14 @@ def plot_grind(log, theme, path, show, net, raw, step):
     below.legend(loc="lower right", bbox_to_anchor=(1, 1.0), ncol=3, borderaxespad=0.3)
     below.set_title("Erkennung v01  -  Balken: wirklich gestanden bzw. bewegt",
                     loc="left", color=theme["muted"])
-    below.set_ylim(0, 1)
-    below.set_yticks((0, 0.5, 1))
-    below.set_ylabel("Erkennung")
-    below.grid(axis="y", color=theme["grid"], linewidth=0.6)
-    below.set_axisbelow(True)
+    decided.legend(loc="lower right", bbox_to_anchor=(1, 1.0), ncol=3, borderaxespad=0.3)
+    decided.set_title("Ergebnis v02  -  höchstens eines davon ist 1", loc="left", color=theme["muted"])
+    for panel in (below, decided):
+        panel.set_ylim(0, 1)
+        panel.set_yticks((0, 0.5, 1))
+        panel.set_ylabel("Erkennung")
+        panel.grid(axis="y", color=theme["grid"], linewidth=0.6)
+        panel.set_axisbelow(True)
 
     changing.set_title("Ableitung des gleitenden Durchschnitts über %d Messungen" % AVERAGE_PANEL,
                        loc="left", color=theme["muted"])
@@ -666,7 +699,7 @@ def plot_grind(log, theme, path, show, net, raw, step):
     changing.set_ylim(max(-CHANGE_MOST, low - 0.5), min(CHANGE_MOST, high + 0.5))
     changing.grid(axis="y", color=theme["grid"], linewidth=0.6)
     changing.set_axisbelow(True)
-    for panel in (below, changing):
+    for panel in (below, decided, changing):
         event_lines(panel, marks, theme, label=False)
     changing.set_xlabel("Zeit seit Aufnahmestart (s)" if meta.get("kind") == "manual"
                         else "Zeit seit Cup-Erkennung (s)")
