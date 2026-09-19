@@ -227,8 +227,17 @@ extern bool debugMode;
 #define DEAD_TIME_CORRECTION 0.4 // ... and only this share of the last deviation goes into it, so a single
                                  // odd grind does not swing it around. It adds up over the grinds, so a
                                  // smaller share only settles slower, it does not leave an error
-#define DEAD_TIME_MIN_FLOW 0.5 // g/s, below this flow at the switch-off the dead time cannot be measured
+#define DEAD_TIME_MIN_FLOW 0.3 // g/s, below this flow at the switch-off the dead time cannot be measured
                                // (the division blows a small overshoot up into seconds), the grind is skipped
+
+// The readings come ten times a second, so switching off on the first one that lies past the target
+// would be up to a tenth of a second late - at 2 g/s a fifth of a gram, and that lateness is a
+// different one in every grind, which no calibration can take out. Instead the line is extrapolated to
+// the moment it will cross the target and the grinder is switched off on that millisecond, between two
+// readings. The last turn of the status loop before it sleeps exactly up to that moment
+#define STATUS_POLL_MS 50 // ms between two turns of the scale status loop
+#define STOP_LOOKAHEAD 2.0 // s, a switch-off further ahead than this is not scheduled yet: that far out
+                           // the line says little, and the next reading gives a better one anyway
 #define MAX_GRINDING_TIME 60000 // 60 seconds (war 40, davor 20)
 #define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
 #define NO_PROGRESS_START_DELAY 10000 // "no progress" abort is only checked this long (ms) after grinding started

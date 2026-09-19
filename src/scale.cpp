@@ -631,6 +631,14 @@ static void grindState(unsigned long now, double *dose, double *flow) {
     *flow = since >= FLOW_EARLY_MIN_RUN && *dose > 0 ? *dose / since : 0;
 }
 
+// The line the switch-off is calculated from: which reading it was built on, when it was read off and
+// what it said there, plus the moment the grinder has to go off. All of it is renewed with every new
+// reading; between two readings the clock alone decides, see the stop logic in the status loop
+static unsigned long stopLineFromReading = 0;
+static unsigned long stopLineAt = 0;
+static double stopLineDose = 0;
+static unsigned long switchOffAt = 0; // 0 while no switch-off is scheduled
+
 // What the switch-off of the last grind tells about the dead time: the grounds that arrived after it,
 // divided by the flow at that moment. Corrects deadTimeEnd towards it by DEAD_TIME_CORRECTION
 static void calibrateDeadTime(double finalDose) {
@@ -702,6 +710,8 @@ void scaleStatusLoop(void *p) {
                     grindFlow = 0;
                     flowAtSwitchOff = 0;
                     doseAtSwitchOff = 0;
+                    stopLineFromReading = stopLineAt = switchOffAt = 0;
+                    stopLineDose = 0;
                     grinderToggle();
                     grindLogMark("grinder_on");
                     continue;
@@ -736,26 +746,48 @@ void scaleStatusLoop(void *p) {
                     abortGrinding("Cup removed");
                     continue;
                 }
-                // The dose so far and how fast it is growing, both read off the line through the last
-                // readings - a single vibration spike moves that line by a fraction of what it moves
-                // the reading itself, so the decision below does not need a spike guard of its own
-                double dose;
-                grindState(millis(), &dose, &grindFlow);
-                // What the grinder will still deliver during its dead time is counted in: as soon as
-                // that carries the dose over the target, it is switched off. In scale mode there is no
-                // grinder to switch off, so there the target is simply reached, without a lead
-                double lead = scaleMode ? 0 : grindFlow * deadTimeEnd;
-                if (dose + lead >= setWeight) {
+                // The dose and how fast it is growing, both read off the line through the last readings
+                // - a single vibration spike moves that line by a fraction of what it moves the reading
+                // itself. The line only changes when a new reading has arrived, so it is renewed with
+                // the reading and not with every turn of the loop
+                if (scaleLastUpdatedAt != stopLineFromReading) {
+                    stopLineFromReading = scaleLastUpdatedAt;
+                    stopLineAt = millis();
+                    grindState(stopLineAt, &stopLineDose, &grindFlow);
+                    // What the grinder will still deliver during its dead time is counted in. In scale
+                    // mode there is no grinder to switch off, so there the target is simply reached
+                    double lead = scaleMode ? 0 : grindFlow * deadTimeEnd;
+                    double missing = setWeight - stopLineDose - lead; // grams left before the switch-off
+                    if (missing <= 0) {
+                        switchOffAt = stopLineAt; // the moment has already passed, off at once
+                    } else if (grindFlow > 0 && missing / grindFlow <= STOP_LOOKAHEAD) {
+                        // At this flow the line needs this long to carry the dose over the target
+                        switchOffAt = stopLineAt + (unsigned long)(missing / grindFlow * 1000);
+                    } else {
+                        switchOffAt = 0; // not growing, or too far out to say
+                    }
+                }
+                // The calculated moment lies between two readings. The turn of the loop that reaches it
+                // sleeps the last few milliseconds up to it, so the grinder goes off on that
+                // millisecond and not on whichever reading happens to arrive next
+                if (switchOffAt != 0 && (long)(switchOffAt - millis()) < STATUS_POLL_MS) {
+                    long remaining = (long)(switchOffAt - millis());
+                    if (remaining > 0) {
+                        delay(remaining);
+                    }
                     finishedGrindingAt = millis();
                     flowAtSwitchOff = grindFlow;
-                    doseAtSwitchOff = dose;
+                    // The line read off at the moment it is really switched off, which is what the
+                    // dead time is measured against once the dose has settled
+                    doseAtSwitchOff = stopLineDose + grindFlow * (long)(finishedGrindingAt - stopLineAt) / 1000.0;
                     // The last grounds are still on their way; only from here on does a reading say
                     // anything about where the dose ends up
                     verifyingFrom = finishedGrindingAt + (unsigned long)(scaleMode ? 0 : deadTimeEnd * 1000);
                     grinderToggle(); // the grinder stops here, the dose is only confirmed in the next state
                     scaleStatus = STATUS_GRINDING_VERIFYING;
-                    grindLogMark("grinder_off w=%.2f dose=%.2f flow=%.2f dead=%.2f", scaleWeight, dose,
-                                 grindFlow, deadTimeEnd);
+                    grindLogMark("grinder_off w=%.2f dose=%.2f flow=%.2f dead=%.2f late=%ld", scaleWeight,
+                                 doseAtSwitchOff, grindFlow, deadTimeEnd,
+                                 (long)(finishedGrindingAt - switchOffAt));
                     continue;
                 }
                 break;
@@ -826,7 +858,7 @@ void scaleStatusLoop(void *p) {
         }
         grindLogPoll(); // "r" and "s" on the serial connection start and end a recording without a grind
         rotary_loop();
-        delay(50);
+        delay(STATUS_POLL_MS);
     }
 }
 
