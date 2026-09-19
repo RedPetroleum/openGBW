@@ -147,6 +147,28 @@ static double v01Filter(double grams, unsigned long at) {
     return kalmanV01.updateEstimate(v01Fitted);
 }
 
+// Filter v02: the average of the last FILTER_V02_WINDOW readings, through the Kalman filter of the old
+// filter. The same amount of averaging as the old one and the same Kalman values, but as a moving
+// average - so a weight comes out for every reading and not only for every fifth
+static double v02Values[FILTER_V02_WINDOW];
+static int v02Count = 0;
+
+static double v02Filter(double grams) {
+    if (v02Count == FILTER_V02_WINDOW) {
+        for (int i = 1; i < FILTER_V02_WINDOW; i++) {
+            v02Values[i - 1] = v02Values[i];
+        }
+        v02Count--;
+    }
+    v02Values[v02Count++] = grams;
+
+    double sum = 0;
+    for (int i = 0; i < v02Count; i++) {
+        sum += v02Values[i];
+    }
+    return kalmanFilter.updateEstimate(sum / v02Count);
+}
+
 // Rounds the weight to DISPLAY_STEP, with the hysteresis described in config.hpp. The shown value is
 // kept as a whole number of steps, otherwise adding 0.1 over and over drifts off
 static void updateShownWeight(double weight, double flatness) {
@@ -227,12 +249,17 @@ void updateScale(void *parameter) {
                 grindLogSample(raw, grams);
                 sum += grams;
                 taken++;
-#if FILTER_V01
-                // v01 is fed every reading, also while a game is running, so its window is current when
-                // the game is left. Only the published weight is the raw reading there
+#if FILTER_FAST
+                // The filter is fed every reading, also while a game is running, so its window is
+                // current when the game is left. Only the published weight is the raw reading there
+#if FILTER == FILTER_V01
                 double filtered = v01Filter(grams, millis());
+                double flatness = 1.0 - ABS(v01Slope) / FILTER_V01_FLAT_SLOPE;
+#else
+                double filtered = v02Filter(grams);
+                double flatness = 0; // v02 knows nothing about flat stretches, the soft hysteresis holds
+#endif
                 if (!fastReadings) {
-                    double flatness = 1.0 - ABS(v01Slope) / FILTER_V01_FLAT_SLOPE;
                     publishWeight(filtered, flatness > 0 ? flatness : 0);
                 }
 #endif
@@ -242,7 +269,7 @@ void updateScale(void *parameter) {
                 scaleReady = false;
                 continue;
             }
-#if FILTER_V01
+#if FILTER_FAST
             if (fastReadings) {
                 publishWeight(sum / taken, 0);
             }

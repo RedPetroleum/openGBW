@@ -73,8 +73,17 @@ extern bool debugMode;
 // clumps only a short one does and it follows at once - and unlike an average a straight line does not
 // trail a rising weight however long its window is. Developed and fitted on recorded grinds, see
 // tools/plotgrind.py and tools/trainfilter.py.
-// Set to 0 for the old filter: five readings averaged into one, that one through the Kalman filter
+// Filter v02: the average of the last FILTER_V02_WINDOW readings through the Kalman filter, the same
+// amount of averaging as the old filter and the same Kalman values - but as a moving average, so a
+// weight comes out for every reading and not only for every fifth. It has no flatness of its own, so
+// the display hysteresis stays on its soft level with it.
+//
+// FILTER picks which one the scale runs
+#define FILTER_OLD 0
 #define FILTER_V01 1
+#define FILTER_V02 2
+#define FILTER FILTER_V02
+#define FILTER_FAST (FILTER != FILTER_OLD) // ... delivers a weight for every reading, ten a second
 #define FILTER_V01_LONGEST 40     // readings the window may grow to
 #define FILTER_V01_SHORTEST 2     // ... and never falls below
 #define FILTER_V01_TOLERANCE 0.15 // g, how far the readings may sit off the line (RMS)
@@ -82,6 +91,7 @@ extern bool debugMode;
 #define FILTER_V01_KALMAN_ERROR 0.02 // measurement and estimate error of the Kalman filter behind it
 #define FILTER_V01_KALMAN_NOISE 0.02 // ... and its process noise; only the ratio of the two does anything
 #define FILTER_V01_FLAT_SLOPE 2.5 // g/s, from here on the line does not count as horizontal at all
+#define FILTER_V02_WINDOW 5       // readings of the moving average, the same number the old filter bundles
 
 // The shown weight steps in DISPLAY_STEP grams. A step of one is only taken when the weight is
 // HYSTERESIS_GRAMS past the middle between two steps, or when HYSTERESIS_READINGS readings in a row all
@@ -98,9 +108,9 @@ extern bool debugMode;
 #define CUP_WEIGHT 396.1 //war 292
 #define CUP_WEIGHT_2 76.3 // second cup
 #define CUP_DETECTION_TOLERANCE 10 // 5 grams tolerance above or bellow cup weight to detect it
-// v01 delivers a weight for every reading of the HX711, the old filter only for every fifth one, so
-// everything that counts readings instead of time has to be five times as much
-#if FILTER_V01
+// v01 and v02 deliver a weight for every reading of the HX711, the old filter only for every fifth one,
+// so everything that counts readings instead of time has to be five times as much
+#if FILTER_FAST
 #define STEADY_READINGS 15 // this many readings in a row ...
 #else
 #define STEADY_READINGS 3
@@ -118,10 +128,10 @@ extern bool debugMode;
 #define SIGNIFICANT_WEIGHT_CHANGE 10 // 5 grams changes are used to detect a significant change
 #define WAKE_WEIGHT_CHANGE 1.0 // a change of this many grams between two readings (e.g. tapping the scale) counts as activity
 #define WAKE_IGNORE_AFTER_TARE_MS 3000 // readings settle this long after taring, their changes do not count as activity
-#if FILTER_V01
+#if FILTER_FAST
 #define MAX_PLAUSIBLE_WEIGHT_JUMP 1.2 // larger jumps between two readings are treated as spikes when stopping
 #else
-#define MAX_PLAUSIBLE_WEIGHT_JUMP 3   // ... five times as much, because a reading is five times as far apart
+#define MAX_PLAUSIBLE_WEIGHT_JUMP 3   // ... more, because a reading is then five times as far apart
 #endif
 #define COFFEE_DOSE_WEIGHT 17.5 //war 18
 #define COFFEE_DOSE_OFFSET -1.67 //war -2.5
