@@ -29,10 +29,10 @@ from grindlog import load  # noqa: E402
 # colour vision deficiency over all pairs. Light and dark are the same hues stepped for their surface
 LIGHT = dict(surface="#fcfcfb", text="#0b0b0b", muted="#52514e", grid="#e8e7e3", rule="#b5b3ad",
              series=("#2a78d6", "#eb6834", "#1baf7a"), new="#4a3aa7", sigma="#e34948", grind="#008300",
-             trained="#0b0b0b")
+             mixed="#e87ba4", trained="#0b0b0b")
 DARK = dict(surface="#1a1a19", text="#ffffff", muted="#c3c2b7", grid="#302f2d", rule="#6b6a65",
             series=("#3987e5", "#d95926", "#199e70"), new="#9085e9", sigma="#e66767", grind="#008300",
-            trained="#ffffff")
+            mixed="#d55181", trained="#ffffff")
 
 REFERENCE_WINDOW = 9 # readings of the centred average that serves as the true course of the weight
 STANDING_BELOW = 0.05 # g/s, a true change this small means the scale was standing
@@ -463,6 +463,11 @@ def adaptive_filter(t, values, longest, shortest, tolerance, jump):
     return out, flat
 
 
+def average_kalman_raw(t, values):
+    """The chain of v02 before the hysteresis, which v03 needs to mix in before anything is rounded"""
+    return kalman(moving_average(t, values)[1], *KALMAN)
+
+
 def average_kalman(t, values):
     """The filter of the firmware, but on a moving average instead of on bundles.
 
@@ -472,7 +477,7 @@ def average_kalman(t, values):
     the rate. The hysteresis behind it is the same one v01 uses, only without its harder level: this
     filter has no flatness of its own to switch it on, so the soft conditions hold everywhere.
     """
-    return hysteresis(kalman(moving_average(t, values)[1], *KALMAN))
+    return hysteresis(average_kalman_raw(t, values))
 
 
 def v01(t, values):
@@ -494,6 +499,16 @@ def derivative(times, values):
         span = times[high] - times[low]
         out.append((values[high] - values[low]) / span if span > 0 else 0.0)
     return out
+
+
+def v03(t, values, flat_decided):
+    """v01, except where the answer of v02 says the weight is lying flat - there the filter of v02.
+
+    Mixed before the hysteresis, so the shown value is rounded once at the end and not twice.
+    """
+    one, flat = v01(t, values)
+    two = average_kalman_raw(t, values)
+    return [two[i] if flat_decided[i] >= 1.0 else one[i] for i in range(len(values))], flat
 
 
 def rate(t):
@@ -614,6 +629,21 @@ def plot_grind(log, theme, path, show, net, raw, step):
                  % (meta.get("shot", "?"), end.get("dose", "?"), end.get("dur", "?"),
                     end.get("reason", "?"), len(samples)))
     figure.suptitle(title, fontsize=11, x=0.01, ha="left")
+
+    # The three detectors of v01, each on the raw readings; grinding also needs how fast the weight
+    # really moves, which is what the fourth panel draws. They come first because v03 uses their answer
+    average = moving_average(t, values, AVERAGE_PANEL)[1]
+    change = derivative(t, average)
+    longest = max(FLAT_V01_LONG, GRIND_V01_LONG)
+    flat, placed, grinding = [], [], []
+    for index in range(len(values)):
+        recent = values[max(0, index - longest + 1):index + 1]
+        flat.append(flat_v01(recent, change[index]))
+        placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
+        grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent, change[index]))
+    result = [decide_v02(*three) for three in zip(flat, placed, grinding)]
+    flat_decided = [one[0] for one in result]
+
     axis.plot(t, values, linestyle="none", marker="o", markersize=2.8,
               color=theme["series"][0], markeredgewidth=0, label="Messwerte", zorder=3)
     # Both filters are drawn as the staircases they are: a filter holds its value until its next update,
@@ -626,7 +656,9 @@ def plot_grind(log, theme, path, show, net, raw, step):
              "Mittel der letzten %d + Kalman + Hysterese (%.1f Hz)" % (AVERAGE_WINDOW, rate(t))),
             (t, hysteresis(*v01(t, values)), theme["trained"],
              "v01: Gerade über das längste Fenster auf %.2f g, dann Kalman (q/Fehler %.0f)"
-             % (ADAPTIVE_TOLERANCE, ADAPTIVE_KALMAN[2] / ADAPTIVE_KALMAN[0]))):
+             % (ADAPTIVE_TOLERANCE, ADAPTIVE_KALMAN[2] / ADAPTIVE_KALMAN[0])),
+            (t, hysteresis(*v03(t, values, flat_decided)), theme["mixed"],
+             "v03: v01, bei flach_v02 = 1 stattdessen v02")):
         # Hidden, the code for them stays: the plain moving average and the two "neu" filters, whose
         # flatness came from the slope and from sigma - trend_filter() with slope_flatness or
         # sigma_flatness still builds them
@@ -651,19 +683,7 @@ def plot_grind(log, theme, path, show, net, raw, step):
                 below.fill_between(t[run:index], height[0], height[1], color=theme["muted"],
                                    linewidth=0, zorder=2)
                 run = None
-    # The three detectors of v01, each on the raw readings; grinding also needs how fast the weight
-    # really moves, which is what the third panel draws
-    average = moving_average(t, values, AVERAGE_PANEL)[1]
-    change = derivative(t, average)
-    longest = max(FLAT_V01_LONG, GRIND_V01_LONG)
-    flat, placed, grinding = [], [], []
-    for index in range(len(values)):
-        recent = values[max(0, index - longest + 1):index + 1]
-        flat.append(flat_v01(recent, change[index]))
-        placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
-        grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent, change[index]))
 
-    result = [decide_v02(*three) for three in zip(flat, placed, grinding)]
     colors = (theme["new"], theme["sigma"], theme["grind"])
     names = ("flach", "aufsetzen", "mahlen")
     for index, (curve, color, name) in enumerate(zip((flat, placed, grinding), colors, names)):
