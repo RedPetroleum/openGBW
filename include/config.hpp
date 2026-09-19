@@ -242,9 +242,13 @@ extern bool debugMode;
 #define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
 #define NO_PROGRESS_START_DELAY 10000 // "no progress" abort is only checked this long (ms) after grinding started
 #define NO_PROGRESS_WINDOW 7000 // ... and only when less than 1g was ground within this window (ms)
-#define FINISHED_MAX_WAIT 6000 // measure the dose at the latest this long (ms) after the grinder stopped,
-                               // even if the reading never settles; before that the settling decides,
-                               // see STEADY_READINGS_MEDIUM
+#define FINISHED_MAX_WAIT 6000 // ms the dose has to have settled in, counted from the end of the dead
+                               // time. A grind that has not delivered a steady, plausible reading by
+                               // then has failed and is neither counted nor calibrated from
+#define DOSE_PLAUSIBLE_GRAMS 5.0 // g, a settled reading further than this from the target is not the
+                                 // dose: a cup that was moved, a hand on the scale, a reading that
+                                 // settled on something else. The grinder only ever switches off near
+                                 // the target, so a deviation this large never comes from the grind
 
 #define GRINDER_ACTIVE_PIN 25 // war 33
 

@@ -650,14 +650,23 @@ static void calibrateDeadTime(double finalDose) {
                             DEAD_TIME_MIN, DEAD_TIME_MAX);
 }
 
-// Stops the grinder and switches to the failed state, which is left by pressing the knob
-void abortGrinding(const char *reason) {
-    grinderToggle();
+// Switches to the failed state, which is left by pressing the knob. The grinder is only toggled where
+// it can still be running: from the verifying phase on it is already off, and toggling it there would
+// start it again - in continuous mode it would stay on, in impulse mode it would get its starting pulse
+static void failGrinding(const char *reason, bool stopGrinder) {
+    if (stopGrinder) {
+        grinderToggle();
+    }
     grindFailReason = reason;
     scaleStatus = STATUS_GRINDING_FAILED;
     grindLogEnd("aborted", "why=\"%s\"", reason);
     Serial.print("Grinding failed: ");
     Serial.println(reason);
+}
+
+// Stops the grinder and switches to the failed state
+void abortGrinding(const char *reason) {
+    failGrinding(reason, true);
 }
 
 // True when the last `readings` weights lie within `tolerance` of each other and all of them around
@@ -806,39 +815,48 @@ void scaleStatusLoop(void *p) {
                 }
                 // The dead time first has to run out: until then the last grounds are still landing and
                 // no reading says anything about where the dose ends up. Only from verifyingFrom on do
-                // they count - the dose counts as reached once STEADY_READINGS_MEDIUM of them in a row
-                // lie no further than STEADY_TOLERANCE_MEDIUM apart. After FINISHED_MAX_WAIT it is taken
-                // anyway, so a restless scale still finishes the grind
+                // they count
                 if (millis() < verifyingFrom) {
                     break;
                 }
-                if ((weightData.countSamplesSince(verifyingFrom) >= STEADY_READINGS_MEDIUM &&
-                     weightData.isSteady(STEADY_READINGS_MEDIUM, STEADY_TOLERANCE_MEDIUM)) ||
-                    millis() - verifyingFrom > FINISHED_MAX_WAIT) {
-                    double dose = currentWeight - cupWeightEmpty;
-                    double usedDeadTime = deadTimeEnd;
-                    if (newDeadTime) {
-                        // What still arrived after the switch-off says how long the dead time really was;
-                        // only a part of the deviation goes into it, see config.hpp
-                        calibrateDeadTime(dose);
-                        shotCount++;
-                        addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0,
-                                       usedDeadTime, flowAtSwitchOff, setWeight, dose);
-                        preferences.begin("scale", false);
-                        preferences.putDouble("deadtime", deadTimeEnd);
-                        preferences.putUInt("shotCount", shotCount);
-                        preferences.putBytes("grindHist", grindHistory, sizeof(grindHistory));
-                        preferences.putInt("grindHistN", grindHistoryCount);
-                        preferences.end();
-                        newDeadTime = false;
+                double dose = currentWeight - cupWeightEmpty;
+                // The dose is reached once the readings have settled - STEADY_READINGS_MEDIUM of them
+                // in a row no further than STEADY_TOLERANCE_MEDIUM apart - and the value they settled
+                // on is a plausible dose. A steady reading alone is not enough: a cup put down again or
+                // a hand resting on the scale is just as steady, and it must not be taken for the dose
+                bool settled = weightData.countSamplesSince(verifyingFrom) >= STEADY_READINGS_MEDIUM &&
+                               weightData.isSteady(STEADY_READINGS_MEDIUM, STEADY_TOLERANCE_MEDIUM);
+                bool plausible = ABS(dose - setWeight) <= DOSE_PLAUSIBLE_GRAMS;
+                if (!settled || !plausible) {
+                    // Whatever is on the scale after FINISHED_MAX_WAIT is not a dose this grind can
+                    // answer for, so it is not counted and the dead time is not calibrated from it
+                    if (millis() - verifyingFrom > FINISHED_MAX_WAIT) {
+                        failGrinding(settled ? "Dose off target" : "Scale unsteady", false);
                     }
-                    // A second of readings is still logged after this, so the log also shows
-                    // how the scale settles once the dose is confirmed
-                    grindLogEnd("finished", "dose=%.2f dur=%.2f flow=%.2f dead=%.2f next_dead=%.2f", dose,
-                                (finishedGrindingAt - startedGrindingAt) / 1000.0, flowAtSwitchOff,
-                                usedDeadTime, deadTimeEnd);
-                    scaleStatus = STATUS_GRINDING_FINISHED;
+                    break;
                 }
+                double usedDeadTime = deadTimeEnd;
+                if (newDeadTime) {
+                    // What still arrived after the switch-off says how long the dead time really was;
+                    // only a part of the deviation goes into it, see config.hpp
+                    calibrateDeadTime(dose);
+                    shotCount++;
+                    addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0,
+                                   usedDeadTime, flowAtSwitchOff, setWeight, dose);
+                    preferences.begin("scale", false);
+                    preferences.putDouble("deadtime", deadTimeEnd);
+                    preferences.putUInt("shotCount", shotCount);
+                    preferences.putBytes("grindHist", grindHistory, sizeof(grindHistory));
+                    preferences.putInt("grindHistN", grindHistoryCount);
+                    preferences.end();
+                    newDeadTime = false;
+                }
+                // A second of readings is still logged after this, so the log also shows
+                // how the scale settles once the dose is confirmed
+                grindLogEnd("finished", "dose=%.2f dur=%.2f flow=%.2f dead=%.2f next_dead=%.2f", dose,
+                            (finishedGrindingAt - startedGrindingAt) / 1000.0, flowAtSwitchOff,
+                            usedDeadTime, deadTimeEnd);
+                scaleStatus = STATUS_GRINDING_FINISHED;
                 break;
             }
             case STATUS_GRINDING_FINISHED: {
