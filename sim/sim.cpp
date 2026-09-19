@@ -72,7 +72,8 @@ TaskHandle_t ScaleTask = nullptr;
 TaskHandle_t ScaleStatusTask = nullptr;
 volatile bool displayLock = false;
 
-void addGrindRecord(uint32_t shot, float duration, float usedOffset, float target, float actual); // scale.cpp
+void addGrindRecord(uint32_t shot, float duration, float deadTime, float flow, float target,
+                    float actual); // scale.cpp
 
 // ---------------------------------------------------------------------------------------------------------------
 // PNG output
@@ -150,7 +151,7 @@ static void step()
     simTime += SIM_FRAME_MS;
   if (simTime - lastReadingAt >= SIM_SCALE_READING_MS)
   {
-    weightHistory.push(scaleWeight);
+    weightData.push(scaleWeight);
     scaleLastUpdatedAt = simTime;
     lastReadingAt = simTime;
   }
@@ -172,7 +173,7 @@ static void setup()
   scaleReady = true;
   scaleLastUpdatedAt = simTime;
   lastActivityAt = simTime;
-  weightHistory.push(scaleWeight);
+  weightData.push(scaleWeight);
   lastReadingAt = simTime;
   step(); // replaces the welcome message with the main screen
 }
@@ -206,8 +207,10 @@ static bool setVariable(const std::string &name, const std::string &text, int li
     scaleWeight = shownWeight = value; // the filter does not run here, the display reads shownWeight
   else if (name == "setWeight")
     setWeight = value;
-  else if (name == "offset")
-    offset = value;
+  else if (name == "deadTimeEnd")
+    deadTimeEnd = value;
+  else if (name == "grindFlow")
+    grindFlow = value;
   else if (name == "cupWeightEmpty")
     cupWeightEmpty = value;
   else if (name == "setCupWeight")
@@ -317,12 +320,13 @@ static bool execute(const std::vector<std::string> &words, int line)
   }
   else if (command == "grind")
   {
-    // grind <shot> <seconds> <offset> <target> <actual>: adds an entry to the Weight History
-    double shot, duration, grindOffset, target, actual;
-    if (words.size() != 6 || !parseNumber(words[1], shot) || !parseNumber(words[2], duration) ||
-        !parseNumber(words[3], grindOffset) || !parseNumber(words[4], target) || !parseNumber(words[5], actual))
-      return fail(line, "usage: grind <shot> <seconds> <offset> <target> <actual>");
-    addGrindRecord(shot, duration, grindOffset, target, actual);
+    // grind <shot> <seconds> <dead time> <flow> <target> <actual>: adds an entry to the Weight History
+    double shot, duration, deadTime, flow, target, actual;
+    if (words.size() != 7 || !parseNumber(words[1], shot) || !parseNumber(words[2], duration) ||
+        !parseNumber(words[3], deadTime) || !parseNumber(words[4], flow) ||
+        !parseNumber(words[5], target) || !parseNumber(words[6], actual))
+      return fail(line, "usage: grind <shot> <seconds> <dead time> <flow> <target> <actual>");
+    addGrindRecord(shot, duration, deadTime, flow, target, actual);
   }
   else if (command == "boot")
   {
@@ -437,7 +441,7 @@ static void usage()
           "  -v         print the serial output of the firmware\n"
           "  -f script  run the commands of a script file\n"
           "commands (separate with \";\"): wait <ms>, turn <detents>, click, hold <ms>, press, release, weight <grams>,\n"
-          "  set <variable> <value>, grind <shot> <seconds> <offset>, draw, shot <name>\n");
+          "  set <variable> <value>, grind <shot> <seconds> <dead> <flow> <target> <actual>, draw, shot <name>\n");
 }
 
 int main(int argc, char **argv)

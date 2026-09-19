@@ -10,15 +10,16 @@ double previousScaleWeight = 0; // Weight of the reading before the current one
 double setWeight = 0;         // Target weight set by the user
 double setCupWeight = 0;      // Weight of the cup set by the user
 double setCupWeight2 = 0;     // Weight of the second cup set by the user
-double offset = 0;            // Offset for stopping grinding prior to reaching set weight
+double deadTimeEnd = DEAD_TIME_END_DEFAULT; // s the grinder keeps delivering after the switch-off
+double grindFlow = 0;         // g/s, the mass flow of the running grind, see stopping logic below
 double scaleFactor = LOADCELL_SCALE_FACTOR; // Load cell calibration factor
 bool scaleMode = false;       // Indicates if the scale is used in timer mode
 bool grindMode = true;        // Grinder mode: impulse (false) or continuous (true, default)
 bool grinderActive = false;   // Grinder state (on/off)
 unsigned int shotCount;  
 
-// Buffer for storing recent weight history
-MathBuffer<double, WEIGHT_HISTORY_SIZE> weightHistory;
+// The last readings of the scale, what the Weight Data of the Debug Menu draws
+MathBuffer<double, WEIGHT_DATA_SIZE> weightData;
 
 // Last finished grinds, newest first
 GrindRecord grindHistory[GRIND_HISTORY_SIZE];
@@ -35,7 +36,10 @@ double cupWeightEmpty = 0;    // Measured weight of the empty cup
 unsigned long startedGrindingAt = 0;  // Timestamp of when grinding started
 unsigned long finishedGrindingAt = 0; // Timestamp of when grinding finished
 bool greset = false;          // Flag for reset operation
-bool newOffset = false;       // Indicates if a new offset value is pending
+bool newDeadTime = false;     // Indicates the running grind still has to calibrate the dead time
+double flowAtSwitchOff = 0;   // g/s, the mass flow at the moment the grinder was switched off ...
+double doseAtSwitchOff = 0;   // ... and the ground weight without the cup at that moment
+unsigned long verifyingFrom = 0; // from when readings count towards the dose, switch-off plus dead time
 const char *grindFailReason = ""; // Why the last grind was aborted, shown on the display
 
 // Tares the scale (sets the current weight to zero). A tare is wanted while lastTareAt is zero, and
@@ -60,8 +64,8 @@ static void tareReset() {
 static void tareTake(long reading) {
     if (tareCount == 0) {
         Serial.println("retaring scale"); // the readings for it come from the sampling loop
-        Serial.println("current offset");
-        Serial.println(offset);
+        Serial.println("current dead time");
+        Serial.println(deadTimeEnd);
     }
     if (tareCount == 0 || reading < tareLowest) {
         tareLowest = reading;
@@ -457,7 +461,7 @@ static void publishWeight(double weight, double flatness) {
     scaleWeight = weight;
     updateShownWeight(weight, flatness);
     scaleLastUpdatedAt = millis();
-    weightHistory.push(scaleWeight);
+    weightData.push(scaleWeight);
     scaleReady = true;
 }
 
@@ -516,7 +520,7 @@ void updateScale(void *parameter) {
                     scaleWeight = filtered;
                     updateShownV03(filtered, other, flatness > 0 ? flatness : 0, flat);
                     scaleLastUpdatedAt = millis();
-                    weightHistory.push(scaleWeight);
+                    weightData.push(scaleWeight);
                     scaleReady = true;
 #else
                     publishWeight(filtered, flatness > 0 ? flatness : 0);
@@ -563,14 +567,79 @@ void grinderToggle() {
 }
 
 // Adds a finished grind to the history (newest first); caller saves it to preferences
-void addGrindRecord(uint32_t shot, float duration, float usedOffset, float target, float actual) {
+void addGrindRecord(uint32_t shot, float duration, float deadTime, float flow, float target, float actual) {
     for (int i = GRIND_HISTORY_SIZE - 1; i > 0; i--) {
         grindHistory[i] = grindHistory[i - 1];
     }
-    grindHistory[0] = {shot, duration, usedOffset, target, actual};
+    grindHistory[0] = {shot, duration, deadTime, flow, target, actual};
     if (grindHistoryCount < GRIND_HISTORY_SIZE) {
         grindHistoryCount++;
     }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// The mass flow the grind is stopped by, see config.hpp
+
+// Straight line through the readings of the last FLOW_WINDOW seconds, never reaching back further than
+// the first grounds can have arrived - before that the cup was only resting, and those readings would
+// pull the line flat. Writes its slope in grams per second and its value at `now`, the weight the line
+// says is on the scale at this moment; false while the window holds too few readings for a line
+static bool windowLine(unsigned long now, double *slope, double *fitted) {
+    int64_t from = (int64_t)now - (int64_t)(FLOW_WINDOW * 1000);
+    int64_t firstGrounds = (int64_t)startedGrindingAt + (int64_t)(FLOW_START_DEAD_TIME * 1000);
+    if (from < firstGrounds) {
+        from = firstGrounds;
+    }
+    int count = 0;
+    double sumTime = 0, sumValue = 0, sumSquares = 0, sumMixed = 0;
+    // Seconds counted backwards from now, so the sums stay small numbers however long the board has run
+    weightData.executeOnSamplesSince(from, [&](double value, int64_t at) {
+        double t = (at - (int64_t)now) / 1000.0;
+        count++;
+        sumTime += t;
+        sumValue += value;
+        sumSquares += t * t;
+        sumMixed += t * value;
+    });
+    if (count < FLOW_WINDOW_MIN_READINGS) {
+        return false;
+    }
+    double meanTime = sumTime / count, meanValue = sumValue / count;
+    double spread = sumSquares - sumTime * meanTime;
+    *slope = spread > 0 ? (sumMixed - sumTime * meanValue) / spread : 0;
+    *fitted = meanValue - *slope * meanTime; // the line read off at now, which sits at t = 0
+    return true;
+}
+
+// The dose in the cup and the mass flow of the running grind, both taken off that line wherever there
+// is one. The cup sits in every reading of the window as the same constant, so it only has to be taken
+// off the value, not off the slope. Over the first FLOW_EARLY_UNTIL seconds the line is still too short
+// for a slope worth trusting, so the flow is the dose divided by the running time less the dead time at
+// the front; the dose itself already comes from the line
+static void grindState(unsigned long now, double *dose, double *flow) {
+    double slope = 0, fitted = 0;
+    bool line = windowLine(now, &slope, &fitted);
+    *dose = (line ? fitted : scaleWeight) - cupWeightEmpty;
+
+    double running = (now - startedGrindingAt) / 1000.0;
+    if (running >= FLOW_EARLY_UNTIL) {
+        *flow = line ? slope : 0;
+        return;
+    }
+    double since = running - FLOW_START_DEAD_TIME;
+    // Nothing has reached the scale yet, or so little of it that the division runs away
+    *flow = since >= FLOW_EARLY_MIN_RUN && *dose > 0 ? *dose / since : 0;
+}
+
+// What the switch-off of the last grind tells about the dead time: the grounds that arrived after it,
+// divided by the flow at that moment. Corrects deadTimeEnd towards it by DEAD_TIME_CORRECTION
+static void calibrateDeadTime(double finalDose) {
+    if (flowAtSwitchOff < DEAD_TIME_MIN_FLOW) {
+        return; // too slow to divide by, the grind says nothing about the dead time and it is left alone
+    }
+    double measured = constrain((finalDose - doseAtSwitchOff) / flowAtSwitchOff, DEAD_TIME_MIN, DEAD_TIME_MAX);
+    deadTimeEnd = constrain(deadTimeEnd + DEAD_TIME_CORRECTION * (measured - deadTimeEnd),
+                            DEAD_TIME_MIN, DEAD_TIME_MAX);
 }
 
 // Stops the grinder and switches to the failed state, which is left by pressing the knob
@@ -589,7 +658,7 @@ void abortGrinding(const char *reason) {
 // between them
 static bool cupResting(double cupWeight, size_t readings, double tolerance) {
     double lowest = 0, highest = 0;
-    return weightHistory.spreadOfLast(readings, lowest, highest) && highest - lowest <= tolerance &&
+    return weightData.spreadOfLast(readings, lowest, highest) && highest - lowest <= tolerance &&
            ABS(lowest - cupWeight) < CUP_DETECTION_TOLERANCE && ABS(highest - cupWeight) < CUP_DETECTION_TOLERANCE;
 }
 
@@ -605,7 +674,7 @@ bool isCupDetected(double cupWeight) {
 // Task to manage the status of the scale
 void scaleStatusLoop(void *p) {
     for (;;) {
-        double tenSecAvg = weightHistory.averageSince((int64_t)millis() - 10000);
+        double tenSecAvg = weightData.averageSince((int64_t)millis() - 10000);
         // Placing, removing or tapping something on the scale keeps the display awake or wakes it
         if (ABS(tenSecAvg - scaleWeight) > SIGNIFICANT_WEIGHT_CHANGE ||
             (ABS(scaleWeight - previousScaleWeight) > WAKE_WEIGHT_CHANGE && millis() - lastTareAt > WAKE_IGNORE_AFTER_TARE_MS)) {
@@ -623,13 +692,16 @@ void scaleStatusLoop(void *p) {
                     // Only the readings the shortest of the detection rules looks at: whichever rule
                     // recognised the cup, these last ones lie within its tolerance, while a longer
                     // window could still reach back into the cup being put down
-                    cupWeightEmpty = weightHistory.averageOfLast(STEADY_READINGS_SHORT);
+                    cupWeightEmpty = weightData.averageOfLast(STEADY_READINGS_SHORT);
                     scaleStatus = STATUS_GRINDING_IN_PROGRESS;
                     grindLogBegin(); // from here on every reading of the load cell is logged
                     if (!scaleMode) {
-                        newOffset = true;
+                        newDeadTime = true;
                         startedGrindingAt = millis();
                     }
+                    grindFlow = 0;
+                    flowAtSwitchOff = 0;
+                    doseAtSwitchOff = 0;
                     grinderToggle();
                     grindLogMark("grinder_on");
                     continue;
@@ -652,7 +724,7 @@ void scaleStatusLoop(void *p) {
                     continue;
                 }
                 if (millis() - startedGrindingAt > NO_PROGRESS_START_DELAY &&
-                    scaleWeight - weightHistory.firstValueOlderThan(millis() - NO_PROGRESS_WINDOW) < 1 &&
+                    scaleWeight - weightData.firstValueOlderThan(millis() - NO_PROGRESS_WINDOW) < 1 &&
                     !scaleMode) {
                     abortGrinding("No progress");
                     continue;
@@ -664,19 +736,26 @@ void scaleStatusLoop(void *p) {
                     abortGrinding("Cup removed");
                     continue;
                 }
-                double currentOffset = offset;
-                if (scaleMode) {
-                    currentOffset = 0;
-                }
-                double targetWeight = cupWeightEmpty + setWeight + currentOffset;
-                // Stop only on a plausible reading: a small step from the previous reading,
-                // or two readings in a row at the target (ignores single vibration spikes)
-                if (scaleWeight >= targetWeight &&
-                    (scaleWeight - previousScaleWeight < MAX_PLAUSIBLE_WEIGHT_JUMP || previousScaleWeight >= targetWeight)) {
+                // The dose so far and how fast it is growing, both read off the line through the last
+                // readings - a single vibration spike moves that line by a fraction of what it moves
+                // the reading itself, so the decision below does not need a spike guard of its own
+                double dose;
+                grindState(millis(), &dose, &grindFlow);
+                // What the grinder will still deliver during its dead time is counted in: as soon as
+                // that carries the dose over the target, it is switched off. In scale mode there is no
+                // grinder to switch off, so there the target is simply reached, without a lead
+                double lead = scaleMode ? 0 : grindFlow * deadTimeEnd;
+                if (dose + lead >= setWeight) {
                     finishedGrindingAt = millis();
+                    flowAtSwitchOff = grindFlow;
+                    doseAtSwitchOff = dose;
+                    // The last grounds are still on their way; only from here on does a reading say
+                    // anything about where the dose ends up
+                    verifyingFrom = finishedGrindingAt + (unsigned long)(scaleMode ? 0 : deadTimeEnd * 1000);
                     grinderToggle(); // the grinder stops here, the dose is only confirmed in the next state
                     scaleStatus = STATUS_GRINDING_VERIFYING;
-                    grindLogMark("grinder_off w=%.2f target=%.2f", scaleWeight, targetWeight);
+                    grindLogMark("grinder_off w=%.2f dose=%.2f flow=%.2f dead=%.2f", scaleWeight, dose,
+                                 grindFlow, deadTimeEnd);
                     continue;
                 }
                 break;
@@ -686,43 +765,46 @@ void scaleStatusLoop(void *p) {
                 // the dose is confirmed, otherwise the sleep timer would leave this state
                 lastActivityAt = millis();
                 // Window of 1s so it always contains readings (an empty window would average to 0)
-                double currentWeight = weightHistory.averageSince((int64_t)millis() - 1000);
+                double currentWeight = weightData.averageSince((int64_t)millis() - 1000);
                 if (scaleWeight < 5) {
                     startedGrindingAt = 0;
                     scaleStatus = STATUS_EMPTY; // the cup was taken before the dose could be confirmed
                     grindLogEnd("unverified", "why=\"cup removed\"");
                     continue;
                 }
-                // The dose counts as reached once the readings have settled: STEADY_READINGS_MEDIUM of
-                // them in a row no further than STEADY_TOLERANCE_MEDIUM apart, and all of them taken
-                // after the grinder was switched off - the last grounds are still landing, so readings
-                // from before the stop say nothing about where the dose ends up. After
-                // FINISHED_MAX_WAIT it is taken anyway, so a restless scale still finishes the grind
-                // The +1 keeps a reading from the millisecond of the switch-off itself out of the count
-                if ((weightHistory.countSamplesSince(finishedGrindingAt + 1) >= STEADY_READINGS_MEDIUM &&
-                     weightHistory.isSteady(STEADY_READINGS_MEDIUM, STEADY_TOLERANCE_MEDIUM)) ||
-                    millis() - finishedGrindingAt > FINISHED_MAX_WAIT) {
-                    if (newOffset) {
-                        double usedOffset = offset;
-                        // Correct only a part of the deviation: the offset adds up over the grinds, so it still
-                        // reaches the right value, but a single bad reading does not swing it around
-                        offset += OFFSET_CORRECTION * (setWeight + cupWeightEmpty - currentWeight);
-                        offset = constrain(offset, OFFSET_MIN, OFFSET_MAX);
+                // The dead time first has to run out: until then the last grounds are still landing and
+                // no reading says anything about where the dose ends up. Only from verifyingFrom on do
+                // they count - the dose counts as reached once STEADY_READINGS_MEDIUM of them in a row
+                // lie no further than STEADY_TOLERANCE_MEDIUM apart. After FINISHED_MAX_WAIT it is taken
+                // anyway, so a restless scale still finishes the grind
+                if (millis() < verifyingFrom) {
+                    break;
+                }
+                if ((weightData.countSamplesSince(verifyingFrom) >= STEADY_READINGS_MEDIUM &&
+                     weightData.isSteady(STEADY_READINGS_MEDIUM, STEADY_TOLERANCE_MEDIUM)) ||
+                    millis() - verifyingFrom > FINISHED_MAX_WAIT) {
+                    double dose = currentWeight - cupWeightEmpty;
+                    double usedDeadTime = deadTimeEnd;
+                    if (newDeadTime) {
+                        // What still arrived after the switch-off says how long the dead time really was;
+                        // only a part of the deviation goes into it, see config.hpp
+                        calibrateDeadTime(dose);
                         shotCount++;
-                        addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0, usedOffset,
-                                       setWeight, currentWeight - cupWeightEmpty);
+                        addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0,
+                                       usedDeadTime, flowAtSwitchOff, setWeight, dose);
                         preferences.begin("scale", false);
-                        preferences.putDouble("offset", offset);
+                        preferences.putDouble("deadtime", deadTimeEnd);
                         preferences.putUInt("shotCount", shotCount);
                         preferences.putBytes("grindHist", grindHistory, sizeof(grindHistory));
                         preferences.putInt("grindHistN", grindHistoryCount);
                         preferences.end();
-                        newOffset = false;
+                        newDeadTime = false;
                     }
                     // A second of readings is still logged after this, so the log also shows
                     // how the scale settles once the dose is confirmed
-                    grindLogEnd("finished", "dose=%.2f dur=%.2f offset=%.2f", currentWeight - cupWeightEmpty,
-                                (finishedGrindingAt - startedGrindingAt) / 1000.0, offset);
+                    grindLogEnd("finished", "dose=%.2f dur=%.2f flow=%.2f dead=%.2f next_dead=%.2f", dose,
+                                (finishedGrindingAt - startedGrindingAt) / 1000.0, flowAtSwitchOff,
+                                usedDeadTime, deadTimeEnd);
                     scaleStatus = STATUS_GRINDING_FINISHED;
                 }
                 break;
@@ -762,7 +844,7 @@ void setupScale() {
     preferences.begin("scale", false);
     scaleFactor = preferences.getDouble("calibration", (double)LOADCELL_SCALE_FACTOR);
     setWeight = preferences.getDouble("setWeight", (double)COFFEE_DOSE_WEIGHT);
-    offset = constrain(preferences.getDouble("offset", (double)COFFEE_DOSE_OFFSET), OFFSET_MIN, OFFSET_MAX);
+    deadTimeEnd = constrain(preferences.getDouble("deadtime", (double)DEAD_TIME_END_DEFAULT), DEAD_TIME_MIN, DEAD_TIME_MAX);
     setCupWeight = preferences.getDouble("cup", (double)CUP_WEIGHT);
     setCupWeight2 = preferences.getDouble("cup2", (double)CUP_WEIGHT_2);
     scaleMode = preferences.getBool("scaleMode", false);

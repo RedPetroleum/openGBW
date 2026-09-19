@@ -12,12 +12,12 @@ Changes on top of the version this is based on (see [Origin](#origin)):
 
 - **Games:** Comet Blaster, Curve Tracer and Doom, controlled with the knob and the pressure on the scale
 - **3D models:** for the Mignon MCI (see [Hardware](#hardware-on-the-mignon-mci))
-- **Grinding:** two dosing cups; aborts on timeout (60 seconds), missing progress, a removed cup or a scale error, with the reason shown on the display; no early stop caused by vibration spikes and no interruption by the display timer
+- **Grinding:** two dosing cups; the grinder is stopped on the mass flow rather than on a fixed offset in grams, the dead time it keeps delivering afterwards is calibrated after every grind; aborts on timeout (60 seconds), missing progress, a removed cup or a scale error, with the reason shown on the display; no early stop caused by vibration spikes and no interruption by the display timer
 - **Calibration:** "Scale Factor" menu to calibrate while watching the live weight (replaces the calibration with a 100g weight), scale factor shown in the Info Menu
 - **Operation:** weights aligned on the decimal point, reworked menu (Exit first, cup weight menus can be left by turning), reversed encoder direction, continuous as default grinding mode, fixed sleep timer that is kept after a restart and wakes the display when the scale is tapped
 - **Debug Menu:** Weight Data of the last 100 readings, Weight History of the last 10 grinds
 - **Filters and logging:** the weight is filtered better and the scale can send every single reading of the load cell over USB, which is what the filters were built on - see [docs/README_LOGGING.md](docs/README_LOGGING.md)
-- **Defaults for my setup:** cup weights 396.1g and 76.3g, scale factor 1760 (1kg load cell), dose 17.5g, offset -1.67g, grinder on GPIO 25
+- **Defaults for my setup:** cup weights 396.1g and 76.3g, scale factor 1760 (1kg load cell), dose 17.5g, dead time 0.30s, grinder on GPIO 25
 
 -----------
 
@@ -64,11 +64,11 @@ The game **Doom** is based on [daveruiz/doom-nano](https://github.com/daveruiz/d
 1) 3D print the included models for a Eureka Mignon MCI or Mignon XL or design your own
 2) flash the firmware onto an ESP32
 3) connect the display, load cell and rotary encoder to the ESP32 and connect the grinder (on the Mignon MCI see [Hardware](#hardware-on-the-mignon-mci), other grinders may need a relay). The pins are defined in `include/config.hpp`
-4) go into the menu by pressing the button of the rotary encoder and set your initial offset. -2g is a good enough starting value
+4) go into the menu by pressing the button of the rotary encoder and look at "Dead Time", the time your grinder keeps delivering after it is switched off. 0.30s is a good enough starting value, the scale calibrates it from there
 5) set the grinding mode: on the Mignon MCI use continuous (the default) and set the grinder to manual mode (see [Hardware](#hardware-on-the-mignon-mci)). Use impulse if your grinder needs a short pulse to start and another one to stop.
 6) calibrate your load cell: open "Scale Factor", place a known weight on the scale and turn the knob until the live weight matches, then press to save
 7) set your dosing cup weights: open "Cup Weight 1", place the empty cup on the scale and press. Repeat with "Cup Weight 2" if you use a second cup or portafilter.
-8) set your desired weight and place one of your empty dosing cups on the scale. The grinding will start and stop automatically. The first grind might be off by a bit. The accuracy will increase with each grind as the scale auto adjusts the grinding offset
+8) set your desired weight and place one of your empty dosing cups on the scale. The grinding will start and stop automatically. The first grind might be off by a bit. The accuracy will increase with each grind as the scale calibrates the dead time of the grinder
 
 -----------
 
@@ -89,10 +89,10 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 | Exit | back to the main screen |
 | Cup Weight 1 / Cup Weight 2 | place the empty cup and press to save its weight, turn to leave without saving |
 | Scale Factor | turn to change the calibration factor while watching the live weight, press to save |
-| Offset | how early the grinder stops before the target weight, between 0 and -10g; after every grind 70% of the deviation is corrected automatically, so it settles on the right value within a few grinds |
+| Dead Time | how long the grinder keeps delivering after it was switched off, between 0 and 2s. The grinder stops as soon as the weight still to come carries the dose over the target, so this is what decides the dose. After every grind 40% of the deviation is corrected automatically, so it settles on the right value within a few grinds |
 | Scale Mode | GBW (default) or scale only (no grinder control, timer starts when the weight increases) |
 | Grinding Mode | continuous (relay stays closed while grinding) or impulse (short pulse to start and stop) |
-| Info Menu | cup weights, offset, scale factor and shot count |
+| Info Menu | cup weights, dead time, scale factor and shot count |
 | Sleep Timer | time without activity until the display turns off (default 60 seconds). Tapping the scale, turning or pressing the knob wakes it without changing anything |
 | Reset | restore all settings to their defaults |
 | Games | see below |
@@ -104,7 +104,7 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 |---|---|
 | Sim Grind | simulates a grind without the grinder |
 | Weight Data | graph of the last 100 scale readings |
-| Weight History | the last 10 grinds (kept after power off), turn to scroll: shot number, grinding time and used offset, press the scale for target weight, actual weight and their difference, pull it up to go back |
+| Weight History | the last 10 grinds (kept after power off), turn to scroll: shot number, grinding time, the dead time the grinder was stopped with and the mass flow at that moment in g/s, press the scale for target weight, actual weight and their difference, pull it up to go back |
 | Zero Shot Count | resets the shot counter to 0 |
 
 #### Games
@@ -135,5 +135,4 @@ All games use the scale as a pressure sensor: remove the cup and press on the sc
 - Game: Tiny Wings
 - nach grind finished noch durch drehen mehr kaffee nachmahlen?
 - Statistiken nach malvorgang einblendbar machen
-- Mahlvorgang nach Massenstrom und offset modellieren. 
 - Readme für tools und filter

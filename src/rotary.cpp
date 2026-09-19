@@ -108,10 +108,10 @@ void rotary_onButtonClick()
             rotaryEncoder.setAcceleration(100); // Faster adjustment when turning quickly
             Serial.println("Scale Factor Menu");
             break;
-        case 4: // Offset Menu
+        case 4: // Dead Time Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 2;
-            Serial.println("Offset Menu");
+            Serial.println("Dead Time Menu");
             break;
         case 5: // Scale Mode Menu
             scaleStatus = STATUS_IN_SUBMENU;
@@ -186,10 +186,10 @@ void rotary_onButtonClick()
             }
             break;
         }
-        case 2: // Offset Menu
+        case 2: // Dead Time Menu
         {
             preferences.begin("scale", false);
-            preferences.putDouble("offset", offset);
+            preferences.putDouble("deadtime", deadTimeEnd);
             preferences.end();
             scaleStatus = STATUS_IN_MENU;
             currentSetting = -1;
@@ -227,8 +227,8 @@ void rotary_onButtonClick()
                 preferences.putDouble("calibration", scaleFactor);
                 setWeight = (double)COFFEE_DOSE_WEIGHT;
                 preferences.putDouble("setWeight", (double)COFFEE_DOSE_WEIGHT);
-                offset = (double)COFFEE_DOSE_OFFSET;
-                preferences.putDouble("offset", (double)COFFEE_DOSE_OFFSET);
+                deadTimeEnd = (double)DEAD_TIME_END_DEFAULT;
+                preferences.putDouble("deadtime", (double)DEAD_TIME_END_DEFAULT);
                 setCupWeight = (double)CUP_WEIGHT;
                 preferences.putDouble("cup", (double)CUP_WEIGHT);
                 setCupWeight2 = (double)CUP_WEIGHT_2;
@@ -381,10 +381,10 @@ void rotary_loop()
                 grindHistoryScroll = constrain(grindHistoryScroll, 0, max(0, grindHistoryCount - GRIND_HISTORY_ROWS));
             }
             else if (currentSetting == 2)
-            { // Offset menu
-                offset += ((float)newValue - (float)encoderValue) * encoderDir / 100;
+            { // Dead time menu, a hundredth of a second per detent
+                deadTimeEnd += ((float)newValue - (float)encoderValue) * encoderDir / 100;
                 encoderValue = newValue;
-                offset = constrain(offset, OFFSET_MIN, OFFSET_MAX); // Prevent nonsensical offsets
+                deadTimeEnd = constrain(deadTimeEnd, DEAD_TIME_MIN, DEAD_TIME_MAX);
             }
             else if (currentSetting == 10)
             { // Scale factor menu, applied immediately so the live weight can be checked

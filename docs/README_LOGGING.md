@@ -19,7 +19,7 @@ The files are CSV with the description of the grind in the leading comment lines
 ```
 # openGBW grind log v1
 # rate 10.00
-# meta {"shot": 301, "cup_empty": 396.05, "target": 17.5, "offset": -1.67, "sf": 1760.0, "tare": 8391200, "bundle": 5, ...}
+# meta {"shot": 301, "cup_empty": 396.05, "target": 17.5, "dead": 0.30, "sf": 1760.0, "tare": 8391200, "bundle": 5, ...}
 # mark {"t_ms": 0, "text": "grinder_on"}
 # mark {"t_ms": 3000, "text": "grinder_off w=412.95 target=411.88", "w": 412.95, "target": 411.88}
 # mark {"t_ms": 4500, "text": "stop reason=finished", "reason": "finished"}

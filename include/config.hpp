@@ -32,16 +32,17 @@ struct GrindRecord
 {
     uint32_t shot;   // shot count after this grind
     float duration;  // grinding time in seconds
-    float offset;    // offset used for this grind in grams
+    float deadTime;  // dead time the grinder was stopped with, in seconds
+    float flow;      // mass flow at the moment of the switch-off, in grams per second
     float target;    // target weight of this grind in grams
     float actual;    // weight actually ground in grams, without the cup
 };
 #define GRIND_HISTORY_SIZE 10 // number of grinds kept in the Weight History
 #define GRIND_HISTORY_ROWS 5  // number of grinds visible at once in the Weight History
-#define WEIGHT_DATA_SETTING 12 // currentSetting while the Weight Data is shown
-#define WEIGHT_HISTORY_SIZE 128 // kept readings, one per pixel column of the Weight Data
 #define GRIND_HISTORY_SETTING 13 // currentSetting while the Weight History is shown
-#define GRIND_HISTORY_PAGES 2 // column pages of the Weight History: time/offset and target/actual/difference
+#define GRIND_HISTORY_PAGES 2 // column pages of the Weight History: time/dead time/flow and target/actual/difference
+#define WEIGHT_DATA_SETTING 12 // currentSetting while the Weight Data is shown
+#define WEIGHT_DATA_SIZE 128 // readings it keeps, one per pixel column; the grind also works on them
 
 // The Weight History is too wide for the display, so the scale itself turns the pages:
 // pressing it down shows the next page, pulling it up goes back
@@ -193,17 +194,41 @@ extern bool debugMode;
 #define SIGNIFICANT_WEIGHT_CHANGE 10 // 5 grams changes are used to detect a significant change
 #define WAKE_WEIGHT_CHANGE 1.0 // a change of this many grams between two readings (e.g. tapping the scale) counts as activity
 #define WAKE_IGNORE_AFTER_TARE_MS 3000 // readings settle this long after taring, their changes do not count as activity
-#if FILTER_FAST
-#define MAX_PLAUSIBLE_WEIGHT_JUMP 1.2 // larger jumps between two readings are treated as spikes when stopping
-#else
-#define MAX_PLAUSIBLE_WEIGHT_JUMP 3   // ... more, because a reading is then five times as far apart
-#endif
 #define COFFEE_DOSE_WEIGHT 17.5 //war 18
-#define COFFEE_DOSE_OFFSET -1.67 //war -2.5
-#define OFFSET_CORRECTION 0.7 // share of the last deviation that is corrected into the offset; the offset
-                              // adds up, so a smaller share only settles slower, it does not leave an error
-#define OFFSET_MIN -10.0 // the offset only ever stops the grinder earlier, so it stays between these grams
-#define OFFSET_MAX 0.0
+
+// Stopping the grinder early, modelled on the mass flow instead of a fixed offset in grams.
+//
+// Two dead times are at work. At the front the grinder needs a moment before the first grounds reach
+// the scale, at the back it keeps delivering for a moment after it has been switched off. The front
+// one is a fixed assumption, the back one is what decides the dose and is therefore calibrated after
+// every grind.
+//
+// A straight line is fitted to the readings of the last FLOW_WINDOW seconds, and both numbers the
+// decision needs are read off it: x is its value at this moment and the flow m is its slope. Taking x
+// off the line rather than from the reading is what keeps a vibration spike from stopping the grinder
+// early - a spike moves a line through dozens of readings by a fraction of what it moves the reading.
+// For the first FLOW_EARLY_UNTIL seconds the line is still too short for a slope worth trusting, so
+// the flow is the ground weight divided by the running time less the dead time at the front,
+// m = x / (t - FLOW_START_DEAD_TIME); x comes off the line from the start.
+//
+// The grinder is switched off as soon as the weight it will still deliver during its dead time carries
+// the dose over the target: x + m * deadTimeEnd >= setWeight. What actually arrived afterwards tells
+// how long that dead time really was, deadTimeEnd is corrected towards it, and so the dose settles in
+// over a few grinds the way the offset used to.
+#define FLOW_START_DEAD_TIME 0.8 // s until the first grounds reach the scale, assumed for the early flow
+#define FLOW_EARLY_MIN_RUN 0.2   // s of grinding past that dead time before the early flow says anything
+#define FLOW_EARLY_UNTIL 5.0     // s after the start up to which the early flow is used ...
+#define FLOW_WINDOW 4.0          // ... from there the slope of a line through this many seconds of readings
+#define FLOW_WINDOW_MIN_READINGS 5 // below this the window has no line, x is the plain reading
+
+#define DEAD_TIME_END_DEFAULT 0.3 // s the grinder keeps delivering after it was switched off, start value
+#define DEAD_TIME_MIN 0.0 // s, the calibrated dead time stays between these two ...
+#define DEAD_TIME_MAX 2.0
+#define DEAD_TIME_CORRECTION 0.4 // ... and only this share of the last deviation goes into it, so a single
+                                 // odd grind does not swing it around. It adds up over the grinds, so a
+                                 // smaller share only settles slower, it does not leave an error
+#define DEAD_TIME_MIN_FLOW 0.5 // g/s, below this flow at the switch-off the dead time cannot be measured
+                               // (the division blows a small overshoot up into seconds), the grind is skipped
 #define MAX_GRINDING_TIME 60000 // 60 seconds (war 40, davor 20)
 #define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
 #define NO_PROGRESS_START_DELAY 10000 // "no progress" abort is only checked this long (ms) after grinding started
@@ -242,7 +267,8 @@ extern double cupWeightEmpty;
 extern unsigned long startedGrindingAt;
 extern unsigned long finishedGrindingAt;
 extern double setWeight;
-extern double offset;
+extern double deadTimeEnd; // s the grinder keeps delivering after the switch-off, calibrated per grind
+extern double grindFlow;   // g/s, the mass flow the running grind is being stopped by
 extern bool scaleMode;
 extern bool grindMode;
 extern bool greset;
@@ -258,7 +284,7 @@ extern int sleepTime;
 extern unsigned int shotCount;
 extern int debugMenuItemsCount;
 extern int currentDebugMenuItem;
-extern MathBuffer<double, WEIGHT_HISTORY_SIZE> weightHistory;
+extern MathBuffer<double, WEIGHT_DATA_SIZE> weightData;
 extern GrindRecord grindHistory[GRIND_HISTORY_SIZE];
 extern int grindHistoryCount;
 extern int grindHistoryScroll;

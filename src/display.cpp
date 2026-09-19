@@ -108,7 +108,7 @@ MenuItem menuItems[12] = {
     {1, false, "Cup Weight 1", 1, &setCupWeight},
     {2, false, "Cup Weight 2", 1, &setCupWeight2},
     {3, false, "Scale Factor", 1, &scaleFactor},
-    {4, false, "Offset", 0.1, &offset},
+    {4, false, "Dead Time", 0.01, &deadTimeEnd},
     {5, false, "Scale Mode", 0},
     {6, false, "Grinding Mode", 0},
     {7, false, "Info Menu", 0},
@@ -228,18 +228,19 @@ void showSleepTimerMenu() {
     screen.sendBuffer();
 }
 
-// Function to display the offset adjustment menu
-void showOffsetMenu()
+// Function to display the dead time adjustment menu. The dead time is what the grinder still delivers
+// after it was switched off; it calibrates itself after every grind and is only adjustable by hand here
+void showDeadTimeMenu()
 {
   char buf[16];
   screen.clearBuffer();
   screen.setFontPosTop();
-  screen.setFont(u8g2_font_7x14B_tf);           // Set the font for the menu title
-  CenterPrintToScreen("Adjust offset", 0);      // Print the menu title
-  screen.setFont(u8g2_font_7x13_tr);            // Set the font for the offset value
-  snprintf(buf, sizeof(buf), "%3.2fg", offset); // Format the offset value
-  CenterPrintToScreen(buf, 28);                 // Print the offset value
-  screen.sendBuffer();                          // Send the buffer to the display
+  screen.setFont(u8g2_font_7x14B_tf);                // Set the font for the menu title
+  CenterPrintToScreen("Adjust dead time", 0);        // Print the menu title
+  screen.setFont(u8g2_font_7x13_tr);                 // Set the font for the value
+  snprintf(buf, sizeof(buf), "%3.2fs", deadTimeEnd); // Format the dead time
+  CenterPrintToScreen(buf, 28);                      // Print the dead time
+  screen.sendBuffer();                               // Send the buffer to the display
 }
 
 // Function to display the manual scale factor adjustment menu
@@ -335,12 +336,12 @@ void showCupWeightSetScreen(double cupWeight)
 // Function to display the recorded weights as a line graph (newest reading on the right)
 void showWeightData()
 {
-  double values[WEIGHT_HISTORY_SIZE];
+  double values[WEIGHT_DATA_SIZE];
   int count = 0;
   int64_t oldestTimestamp = millis();
   // Samples are delivered from newest to oldest
-  weightHistory.executeOnSamplesSince(0, [&](double value, int64_t ms) {
-    if (count < WEIGHT_HISTORY_SIZE)
+  weightData.executeOnSamplesSince(0, [&](double value, int64_t ms) {
+    if (count < WEIGHT_DATA_SIZE)
     {
       values[count++] = value;
       oldestTimestamp = ms;
@@ -429,7 +430,8 @@ static void grindHistoryScaleInput()
 }
 
 // Function to display the last grinds (newest first, turn to scroll, press the scale for the next page).
-// The header names the columns of the current page: time and offset, or target, actual weight and difference.
+// The header names the columns of the current page: grinding time, dead time and mass flow at the
+// switch-off, or target, actual weight and difference.
 void showGrindHistory()
 {
   char buf[32];
@@ -446,7 +448,7 @@ void showGrindHistory()
   }
   LeftPrintToScreen("Shot", 0);
   // Same widths as the values below, so the header sits above its columns
-  RightPrintToScreen(grindHistoryPage == 0 ? "Time  Offset" : "Targ  Act Diff", 0);
+  RightPrintToScreen(grindHistoryPage == 0 ? "Time   Dead g/s" : "Targ  Act Diff", 0);
   for (int row = 0; row < GRIND_HISTORY_ROWS; row++)
   {
     int index = grindHistoryScroll + row;
@@ -456,7 +458,7 @@ void showGrindHistory()
     snprintf(buf, sizeof(buf), "#%lu", (unsigned long)record.shot);
     LeftPrintToScreen(buf, 12 + row * 10);
     if (grindHistoryPage == 0)
-      snprintf(buf, sizeof(buf), "%.1fs %6.2fg", record.duration, record.offset);
+      snprintf(buf, sizeof(buf), "%4.1fs %4.2fs %3.1f", record.duration, record.deadTime, record.flow);
     else
       snprintf(buf, sizeof(buf), "%4.1f %4.1f %+4.1f", record.target, record.actual, record.actual - record.target);
     RightPrintToScreen(buf, 12 + row * 10);
@@ -501,8 +503,8 @@ void showInfoMenu() {
     snprintf(buf, sizeof(buf), "Cups: %.1f/%.1fg", setCupWeight, setCupWeight2);
     LeftPrintToScreen(buf, 16);
 
-    // Display offset
-    snprintf(buf, sizeof(buf), "Offset: %3.2fg", offset);
+    // Display the dead time the grinder is stopped with
+    snprintf(buf, sizeof(buf), "Dead Time: %3.2fs", deadTimeEnd);
     LeftPrintToScreen(buf, 28);
 
     // Display scale factor
@@ -544,7 +546,7 @@ void showSetting()
   }
   else if (currentSetting == 2)
   {
-    showOffsetMenu();
+    showDeadTimeMenu();
   }
   else if (currentSetting == 3)
   {
@@ -614,7 +616,7 @@ void handleDebugMenuAction()
         currentSetting = WEIGHT_DATA_SETTING; // Graph is drawn by the display task, click returns to the Debug Menu
         return;
 
-    case 3: // Show Weight History (time, offset, target and actual weight of the last grinds)
+    case 3: // Show Weight History (time, dead time, flow, target and actual weight of the last grinds)
         Serial.println("Displaying Weight History...");
         resetGrindHistoryInput();
         currentSetting = GRIND_HISTORY_SETTING; // Drawn by the display task, turn to scroll, press the scale to page, click returns

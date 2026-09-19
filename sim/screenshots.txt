@@ -23,7 +23,7 @@ draw; shot grinding-failed
 click; shot menu
 turn 1; click; shot cup-weight-1
 turn 1; turn 2; click; weight 3.2; wait 200; shot scale-factor
-click; turn 1; click; shot offset
+click; turn 1; click; shot dead-time
 click; turn 1; click; shot scale-mode
 click; turn 1; click; shot grinding-mode
 click; turn 1; click; shot info
@@ -33,7 +33,7 @@ click; turn 1; click; shot games-menu
 click; turn 1; click; shot debug-menu
 
 [debug menu]
-grind 305 8.1 -1.62 17.5 17.4; grind 306 7.8 -1.70 17.5 17.8; grind 307 8.4 -1.58 17.5 17.5
+grind 305 8.1 0.28 2.1 17.5 17.4; grind 306 7.8 0.34 2.3 17.5 17.8; grind 307 8.4 0.31 2.0 17.5 17.5
 click; turn -1; click
 turn 3; click; shot weight-history
 weight 80; wait 200; shot weight-history-weights # pressing the scale shows the next columns
