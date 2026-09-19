@@ -18,6 +18,8 @@ public:
 	T maxSince(int64_t cutoffMs);
 	T minSince(int64_t cutoffMs);
 	T firstValueOlderThan(int64_t cutoffMs);
+	bool spreadOfLast(size_t n, T &lowest, T &highest);
+	T averageOfLast(size_t n);
 	bool isSteady(size_t n, T tolerance);
 
 private:

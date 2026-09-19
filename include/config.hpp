@@ -163,6 +163,25 @@ extern bool debugMode;
 #endif
 #define STEADY_TOLERANCE 0.1 // ... within this many grams of each other mean the reading has settled
 
+// Two looser pairs of the same kind: fewer readings, but more room between the lowest and the highest
+// of them. They are enough for the cup detection as well, so a cup does not have to lie still for a
+// second and a half before the grinder starts - half a second of readings that do not wander more
+// than SHORT_TOLERANCE is a cup standing on the scale just as much. The middle pair also decides when
+// the dose may be measured after grinding
+#if FILTER_FAST
+#define STEADY_READINGS_SHORT 5   // half a second at 10 Hz ...
+#define STEADY_READINGS_MEDIUM 10 // ... and a whole one
+#define STEADY_TOLERANCE_SHORT 0.6
+#define STEADY_TOLERANCE_MEDIUM 0.7
+#else
+// The old filter delivers a weight only twice a second, where five readings are two and a half
+// seconds - there the tight pair stays the only one
+#define STEADY_READINGS_SHORT STEADY_READINGS
+#define STEADY_READINGS_MEDIUM STEADY_READINGS
+#define STEADY_TOLERANCE_SHORT STEADY_TOLERANCE
+#define STEADY_TOLERANCE_MEDIUM STEADY_TOLERANCE
+#endif
+
 #define LOADCELL_DOUT_PIN 19
 #define LOADCELL_SCK_PIN 18
 
@@ -189,8 +208,9 @@ extern bool debugMode;
 #define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
 #define NO_PROGRESS_START_DELAY 10000 // "no progress" abort is only checked this long (ms) after grinding started
 #define NO_PROGRESS_WINDOW 7000 // ... and only when less than 1g was ground within this window (ms)
-#define FINISHED_MIN_WAIT 1500 // wait at least this long (ms) after the grinder stopped before measuring the dose
-#define FINISHED_MAX_WAIT 6000 // ... and at most this long if the reading never settles
+#define FINISHED_MAX_WAIT 6000 // measure the dose at the latest this long (ms) after the grinder stopped,
+                               // even if the reading never settles; before that the settling decides,
+                               // see STEADY_READINGS_MEDIUM
 
 #define GRINDER_ACTIVE_PIN 25 // war 33
 

@@ -583,12 +583,23 @@ void abortGrinding(const char *reason) {
     Serial.println(reason);
 }
 
-// Checks if the given cup has been resting on the scale for the last second
-// and the reading has settled, so the empty cup is weighed accurately
+// True when the last `readings` weights lie within `tolerance` of each other and all of them around
+// the given cup weight - the cup is standing on the scale and the reading has settled, so the empty
+// cup is weighed accurately. Both ends are checked against the cup weight, everything else lies
+// between them
+static bool cupResting(double cupWeight, size_t readings, double tolerance) {
+    double lowest = 0, highest = 0;
+    return weightHistory.spreadOfLast(readings, lowest, highest) && highest - lowest <= tolerance &&
+           ABS(lowest - cupWeight) < CUP_DETECTION_TOLERANCE && ABS(highest - cupWeight) < CUP_DETECTION_TOLERANCE;
+}
+
+// Checks if the given cup is resting on the scale. Any of the three pairs of readings and tolerance
+// is enough: the tight one needs a second and a half of readings that hardly move at all, the two
+// looser ones half a second and a second of readings that wander a little more, see config.hpp
 bool isCupDetected(double cupWeight) {
-    return ABS(weightHistory.minSince((int64_t)millis() - 1000) - cupWeight) < CUP_DETECTION_TOLERANCE &&
-           ABS(weightHistory.maxSince((int64_t)millis() - 1000) - cupWeight) < CUP_DETECTION_TOLERANCE &&
-           weightHistory.isSteady(STEADY_READINGS, STEADY_TOLERANCE);
+    return cupResting(cupWeight, STEADY_READINGS, STEADY_TOLERANCE) ||
+           cupResting(cupWeight, STEADY_READINGS_SHORT, STEADY_TOLERANCE_SHORT) ||
+           cupResting(cupWeight, STEADY_READINGS_MEDIUM, STEADY_TOLERANCE_MEDIUM);
 }
 
 // Task to manage the status of the scale
@@ -609,8 +620,10 @@ void scaleStatusLoop(void *p) {
                     lastTareAt = 0; // Retare if conditions are met
                 }
                 if (isCupDetected(setCupWeight) || isCupDetected(setCupWeight2)) {
-                    // Same window as the cup detection, so it is guaranteed to contain readings
-                    cupWeightEmpty = weightHistory.averageSince((int64_t)millis() - 1000);
+                    // Only the readings the shortest of the detection rules looks at: whichever rule
+                    // recognised the cup, these last ones lie within its tolerance, while a longer
+                    // window could still reach back into the cup being put down
+                    cupWeightEmpty = weightHistory.averageOfLast(STEADY_READINGS_SHORT);
                     scaleStatus = STATUS_GRINDING_IN_PROGRESS;
                     grindLogBegin(); // from here on every reading of the load cell is logged
                     if (!scaleMode) {
@@ -680,11 +693,15 @@ void scaleStatusLoop(void *p) {
                     grindLogEnd("unverified", "why=\"cup removed\"");
                     continue;
                 }
-                // The dose counts as reached once the reading has settled; after FINISHED_MAX_WAIT it is
-                // taken anyway, so a restless scale still finishes the grind
-                if (millis() - finishedGrindingAt > FINISHED_MIN_WAIT &&
-                    (weightHistory.isSteady(STEADY_READINGS, STEADY_TOLERANCE) ||
-                     millis() - finishedGrindingAt > FINISHED_MAX_WAIT)) {
+                // The dose counts as reached once the readings have settled: STEADY_READINGS_MEDIUM of
+                // them in a row no further than STEADY_TOLERANCE_MEDIUM apart, and all of them taken
+                // after the grinder was switched off - the last grounds are still landing, so readings
+                // from before the stop say nothing about where the dose ends up. After
+                // FINISHED_MAX_WAIT it is taken anyway, so a restless scale still finishes the grind
+                // The +1 keeps a reading from the millisecond of the switch-off itself out of the count
+                if ((weightHistory.countSamplesSince(finishedGrindingAt + 1) >= STEADY_READINGS_MEDIUM &&
+                     weightHistory.isSteady(STEADY_READINGS_MEDIUM, STEADY_TOLERANCE_MEDIUM)) ||
+                    millis() - finishedGrindingAt > FINISHED_MAX_WAIT) {
                     if (newOffset) {
                         double usedOffset = offset;
                         // Correct only a part of the deviation: the offset adds up over the grinds, so it still
