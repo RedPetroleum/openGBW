@@ -39,15 +39,15 @@ turn 3; click; shot weight-history
 weight 80; wait 200; shot weight-history-weights # pressing the scale shows the next columns
 weight 0; wait 200; weight -80; wait 200; shot weight-history # pulling it up goes back
 
-[weight chart]
+[weight data]
 weight 0; wait 2000; weight 396.1; wait 1500
 weight 400; wait 1000; weight 405; wait 1000; weight 410; wait 1000; weight 413.6; wait 3000
-click; turn -1; click; turn 2; click; shot weight-chart-grind
+click; turn -1; click; turn 2; click; shot weight-data-grind
 
-[weight chart of a quiet scale]
+[weight data of a quiet scale]
 click; turn -1; click; turn 2; click
 weight 0.02; wait 900; weight -0.03; wait 900; weight 0.05; wait 900; weight 0.01; wait 900
-weight 0.04; wait 900; weight -0.01; wait 900; weight 0.03; wait 2000; shot weight-chart-quiet
+weight 0.04; wait 900; weight -0.01; wait 900; weight 0.03; wait 2000; shot weight-data-quiet
 
 [comet blaster]
 click; turn -2; click; turn 1; click

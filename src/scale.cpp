@@ -458,10 +458,10 @@ void updateScale(void *parameter) {
         }
         if (loadcell.wait_ready_timeout(300)) {
             // Single readings without a filter: the game needs the laser to react quickly when the scale
-            // is pressed, paging through the Weight History the same, and the Weight Chart shows what the
+            // is pressed, paging through the Weight History the same, and the Weight Data shows what the
             // load cell really delivers
             bool fastReadings = scaleStatus == STATUS_GAME || currentSetting == GRIND_HISTORY_SETTING ||
-                                currentSetting == WEIGHT_CHART_SETTING;
+                                currentSetting == WEIGHT_DATA_SETTING;
             // The readings are taken one by one instead of through get_units(n), which averages them inside
             // the library: the grind log needs every single one of them, unfiltered and at the full 10 Hz of
             // the HX711, and v01 works on them one by one as well

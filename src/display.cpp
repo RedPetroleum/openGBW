@@ -73,6 +73,13 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define GRIND_BAR_HEIGHT 12
 #define GRIND_BAR_EASING 8.0f // how fast the drawn bar follows the reading (1/s), the scale only reports twice a second
 
+// A weight that rounds to zero is shown without a sign: a reading a few hundredths below the cup
+// weight would otherwise appear as "-0.0" while the grinder is running
+static double noMinusZero(double weight)
+{
+  return lround(weight * 10) == 0 ? 0.0 : weight;
+}
+
 // Function to print a weight with its decimal point at WEIGHT_DECIMAL_X and a narrow gap before "g"
 // Requires a font where all digits have the same advance width
 void WeightPrintToScreen(double weight, u8g2_uint_t y)
@@ -122,7 +129,7 @@ static unsigned long historyInputAt = 0; // Time of the last page navigation upd
 MenuItem debugMenuItems[5] = {
     {0, false, "Exit", 0},
     {1, false, "Sim Grind", 0},
-    {2, false, "Weight Chart", 0},
+    {2, false, "Weight Data", 0},
     {3, false, "Weight History", 0},
     {4, false, "Zero Shot Count", 0}
 };
@@ -246,7 +253,7 @@ void showScaleFactorMenu()
   snprintf(buf, sizeof(buf), "%.1f", scaleFactor);     // Format the scale factor
   CenterPrintToScreen(buf, 19);                        // Print the scale factor
   screen.setFont(u8g2_font_7x13_tr);                   // Set the font for the live weight
-  snprintf(buf, sizeof(buf), "Weight: %3.1fg", shownWeight);
+  snprintf(buf, sizeof(buf), "Weight: %3.1fg", noMinusZero(shownWeight));
   CenterPrintToScreen(buf, 35);                        // Print the live weight for checking
   CenterPrintToScreen("Press to save", 51);            // Print instructions
   screen.sendBuffer();                                 // Send the buffer to the display
@@ -304,7 +311,7 @@ void showCupMenu(char const *title)
   screen.setFont(u8g2_font_7x14B_tf);                // Set the font for the menu title
   CenterPrintToScreen(title, 0);                     // Print the menu title
   screen.setFont(u8g2_font_7x13_tr);                 // Set the font for the instructions
-  snprintf(buf, sizeof(buf), "%3.1fg", shownWeight); // Format the scale weight
+  snprintf(buf, sizeof(buf), "%3.1fg", noMinusZero(shownWeight)); // Format the scale weight
   CenterPrintToScreen(buf, 19);                      // Print the scale weight
   LeftPrintToScreen("Place cup, press", 35);         // Print instructions
   LeftPrintToScreen("Turn to cancel", 51);           // Turning leaves without saving
@@ -326,7 +333,7 @@ void showCupWeightSetScreen(double cupWeight)
 }
 
 // Function to display the recorded weights as a line graph (newest reading on the right)
-void showWeightChart()
+void showWeightData()
 {
   double values[WEIGHT_HISTORY_SIZE];
   int count = 0;
@@ -566,9 +573,9 @@ void showSetting()
   {
     showScaleFactorMenu();
   }
-  else if (currentSetting == WEIGHT_CHART_SETTING)
+  else if (currentSetting == WEIGHT_DATA_SETTING)
   {
-    showWeightChart();
+    showWeightData();
   }
   else if (currentSetting == GRIND_HISTORY_SETTING)
   {
@@ -602,9 +609,9 @@ void handleDebugMenuAction()
         exitToMenu();
         break;
 
-    case 2: // Show Weight Chart
-        Serial.println("Displaying Weight Chart...");
-        currentSetting = WEIGHT_CHART_SETTING; // Graph is drawn by the display task, click returns to the Debug Menu
+    case 2: // Show Weight Data
+        Serial.println("Displaying Weight Data...");
+        currentSetting = WEIGHT_DATA_SETTING; // Graph is drawn by the display task, click returns to the Debug Menu
         return;
 
     case 3: // Show Weight History (time, offset, target and actual weight of the last grinds)
@@ -799,7 +806,7 @@ void refreshDisplay()
       screen.setFontPosCenter();
       screen.setFont(u8g2_font_7x14B_tf);
       screen.setCursor(3, 26);
-      snprintf(buf, sizeof(buf), "%3.1fg", shownWeight - cupWeightEmpty);
+      snprintf(buf, sizeof(buf), "%3.1fg", noMinusZero(shownWeight - cupWeightEmpty));
       screen.print(buf);
 
       screen.setFontPosCenter();
@@ -832,7 +839,7 @@ void refreshDisplay()
 
       screen.setFont(u8g2_font_7x14B_tf);
       screen.setFontPosCenter();
-      WeightPrintToScreen(abs(shownWeight), 32);
+      WeightPrintToScreen(noMinusZero(shownWeight), 32); // negative weights keep their sign
 
       // Set weight is aligned on the decimal point below the measured weight, "Set:" sits left of it
       screen.setFont(u8g2_font_7x13_tf);
@@ -862,7 +869,7 @@ void refreshDisplay()
       screen.setFontPosCenter();
       screen.setFont(u8g2_font_7x14B_tf);
       screen.setCursor(3, 32);
-      snprintf(buf, sizeof(buf), "%3.1fg", shownWeight - cupWeightEmpty);
+      snprintf(buf, sizeof(buf), "%3.1fg", noMinusZero(shownWeight - cupWeightEmpty));
       screen.print(buf);
 
       screen.setFontPosCenter();

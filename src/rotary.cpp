@@ -306,7 +306,7 @@ void rotary_onButtonClick()
             gamesMenuOnClick(); // Starts the selected game or returns to the main menu
             break;
         }
-        case WEIGHT_CHART_SETTING: // Weight Chart view
+        case WEIGHT_DATA_SETTING: // Weight Data view
         case GRIND_HISTORY_SETTING: // Weight History view
         {
             currentSetting = 9; // Back to the Debug Menu

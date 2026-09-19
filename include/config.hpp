@@ -38,8 +38,8 @@ struct GrindRecord
 };
 #define GRIND_HISTORY_SIZE 10 // number of grinds kept in the Weight History
 #define GRIND_HISTORY_ROWS 5  // number of grinds visible at once in the Weight History
-#define WEIGHT_CHART_SETTING 12 // currentSetting while the Weight Chart is shown
-#define WEIGHT_HISTORY_SIZE 128 // kept readings, one per pixel column of the Weight Chart
+#define WEIGHT_DATA_SETTING 12 // currentSetting while the Weight Data is shown
+#define WEIGHT_HISTORY_SIZE 128 // kept readings, one per pixel column of the Weight Data
 #define GRIND_HISTORY_SETTING 13 // currentSetting while the Weight History is shown
 #define GRIND_HISTORY_PAGES 2 // column pages of the Weight History: time/offset and target/actual/difference
 
