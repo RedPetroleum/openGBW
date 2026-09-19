@@ -13,6 +13,8 @@ of three grinds at once cannot be told apart).
     tools/plotgrind.py --raw                 # the counts of the HX711 instead of grams
     tools/plotgrind.py --grid 0.5            # a line every 0.5 g instead of every 0.1 g
     tools/plotgrind.py --format pdf          # vector as well, SVG is the default
+    tools/plotgrind.py --fit 9:30            # a straight line through the readings of 9 s to 30 s
+    tools/plotgrind.py --level 33:43         # ... and one without a slope, the average of the range
 """
 
 import argparse
@@ -603,6 +605,24 @@ def moving_average(t, values, window=AVERAGE_WINDOW):
     return t, out
 
 
+def fit_line(t, values, first, last, level=False):
+    """Least squares line through the readings between `first` and `last` seconds.
+
+    Returns a point of the line and its slope, or None when the range holds no readings. With `level`
+    the slope is fixed at zero, which leaves the average of the range - the horizontal through it.
+    """
+    points = [(x, y) for x, y in zip(t, values) if first <= x <= last]
+    if not points:
+        return None
+    middle = sum(x for x, _ in points) / len(points)
+    average = sum(y for _, y in points) / len(points)
+    if level:
+        return middle, average, 0.0
+    spread = sum((x - middle) ** 2 for x, _ in points)
+    slope = sum((x - middle) * (y - average) for x, y in points) / spread if spread else 0.0
+    return middle, average, slope
+
+
 def series(log, net, raw):
     """Time in seconds and the value of every single reading"""
     meta, marks, end, samples = log
@@ -693,7 +713,7 @@ def flat_shading(axis, t, strength, color, strongest=0.3, levels=8):
         start = index
 
 
-def plot_grind(log, theme, path, show, net, raw, step):
+def plot_grind(log, theme, path, show, net, raw, step, lines=()):
     import matplotlib.pyplot as plt
 
     meta, marks, end, samples = log
@@ -744,6 +764,20 @@ def plot_grind(log, theme, path, show, net, raw, step):
         # sigma_flatness still builds them
         axis.plot(when, filtered, linewidth=0.7, color=color, label=label, zorder=4,
                   drawstyle="steps-post")
+    # Straight lines fitted to the readings of a range, drawn across the whole width and without ends,
+    # so where they run outside their range can be read off as well
+    for index, (first, last, level) in enumerate(lines):
+        fitted = fit_line(t, values, first, last, level)
+        if fitted is None:
+            print("%g-%g s holds no readings, line skipped" % (first, last), file=sys.stderr)
+            continue
+        middle, average, slope = fitted
+        name = "counts" if raw else "g"
+        axis.axline((middle, average), slope=slope, zorder=5, linewidth=1.0, linestyle=(0, (6, 3)),
+                    color=(theme["new"], theme["sigma"], theme["grind"])[index % 3],
+                    label="%g-%g s: %.2f %s" % (first, last, average, name) if level
+                          else "%g-%g s: %+.3f %s/s" % (first, last, slope, name))
+
     handles, _ = axis.get_legend_handles_labels()
     axis.legend(handles=handles, loc="upper left")
     axis.set_ylabel(unit(net, raw))
@@ -845,7 +879,22 @@ def main():
                         help="grams between two lines of the grid (0.1)")
     parser.add_argument("--format", default="svg", choices=("svg", "pdf", "png"),
                         help="file format, vector by default (svg)")
+    parser.add_argument("--fit", action="append", default=[], metavar="A:B",
+                        help="a straight line through the readings between A and B seconds, drawn "
+                             "across the whole panel; may be given more than once")
+    parser.add_argument("--level", action="append", default=[], metavar="A:B",
+                        help="the same without a slope: the average of the range as a horizontal")
     args = parser.parse_args()
+
+    lines = []
+    for ranges, level in ((args.fit, False), (args.level, True)):
+        for given in ranges:
+            try:
+                first, last = (float(part) for part in given.replace(",", ".").split(":"))
+            except ValueError:
+                print("%s is not a range of seconds, e.g. 9:30" % given, file=sys.stderr)
+                return 1
+            lines.append((first, last, level))
 
     paths = args.logs or sorted(glob.glob("logs/*.csv"))
     if not paths:
@@ -865,7 +914,7 @@ def main():
             continue
         logs.append(log)
         target = os.path.join(args.out, os.path.splitext(os.path.basename(path))[0] + "." + args.format)
-        plot_grind(log, theme, target, args.show, args.net, args.raw, args.grid)
+        plot_grind(log, theme, target, args.show, args.net, args.raw, args.grid, lines)
         print(path if args.show else target)
 
     if len(logs) > 1:

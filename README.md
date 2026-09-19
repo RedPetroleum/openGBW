@@ -130,10 +130,10 @@ All games use the scale as a pressure sensor: remove the cup and press on the sc
 - Better Loading Screen
 - Game: Flappy Bird
 - Debug-Option: Disable Grinding (Show Dot or something instead)
-- Better grinding Screen with graph or loading screen or something. 
 - Game: Death Star: https://drive.google.com/drive/folders/19_JMvg4HcsPCw0QcT5VSEuF0uNpCn1_V
 - Game: Pong
 - Game: Tiny Wings
-- nach grind finished noch durch drehen mehr kaffee nachmahlen
-- ruckeln/einfrieren beheben
+- nach grind finished noch durch drehen mehr kaffee nachmahlen?
+- Statistiken nach malvorgang einblendbar machen
 - Mahlvorgang nach Massenstrom und offset modellieren. 
+- Readme für tools und filter
