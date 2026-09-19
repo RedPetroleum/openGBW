@@ -106,6 +106,13 @@ HYSTERESIS_FLAT_FROM = 0.9 # flatness from which the harder conditions are used
 HYSTERESIS_GRAMS_FLAT = 0.05
 HYSTERESIS_READINGS_FLAT = 6
 
+# v03 makes a single step harder still: flach_v01 has to be at 1 and v02 has to land on the same step.
+# A difference of two steps or more is not affected, so while the weight races up the display follows
+# in 0.2 g instead of 0.1 g. And a shown value this close to zero for this many readings in a row is
+# shown as a plain zero - the weight itself is left alone, nothing is tared
+ZERO_V03_GRAMS = 0.2
+ZERO_V03_READINGS = 10
+
 
 def kalman(values, err_measure, err_estimate, q):
     """SimpleKalmanFilter of the firmware, line by line as in the library (denyssene/SimpleKalmanFilter).
@@ -501,14 +508,52 @@ def derivative(times, values):
     return out
 
 
-def v03(t, values, flat_decided):
-    """v01, except where the answer of v02 says the weight is lying flat - there the filter of v02.
+def hysteresis_v03(values, soft_flat, detected_flat, other, step=DISPLAY_STEP):
+    """The hysteresis of v03, on the values of v01.
 
-    Mixed before the hysteresis, so the shown value is rounded once at the end and not twice.
+    A single step needs everything the ordinary hysteresis needs, and on top of that a moment where
+    flat_v01 is at 1 and where v02 would land on that same step. A difference of two steps or more is
+    not affected, so a weight racing up is followed in 0.2 g steps instead of 0.1 g ones.
+
+    Whatever it ends up showing, a value within ZERO_V03_GRAMS of zero for ZERO_V03_READINGS readings in
+    a row is shown as a plain zero. Only the display: the value behind it keeps whatever it had, so this
+    is not a tare and nothing drifts away.
     """
-    one, flat = v01(t, values)
-    two = average_kalman_raw(t, values)
-    return [two[i] if flat_decided[i] >= 1.0 else one[i] for i in range(len(values))], flat
+    if not values:
+        return []
+    out, unit = [], int(round(values[0] / step))
+    pending, direction, zeros = 0, 0, 0
+    for index, value in enumerate(values):
+        strict = soft_flat[index] >= HYSTERESIS_FLAT_FROM
+        extra = HYSTERESIS_GRAMS_FLAT if strict else HYSTERESIS_GRAMS
+        confirm = HYSTERESIS_READINGS_FLAT if strict else HYSTERESIS_READINGS
+
+        delta = int(round(value / step)) - unit
+        if delta >= 2 or delta <= -2:
+            unit += delta # more than one step, neither hysteresis applies
+            pending = direction = 0
+        elif delta == 0:
+            pending = direction = 0
+        else:
+            if delta != direction:
+                direction, pending = delta, 0
+            pending += 1
+            boundary = (unit + delta * 0.5) * step + delta * extra
+            agreed = detected_flat[index] >= 1.0 and int(round(other[index] / step)) == unit + delta
+            if agreed and (pending >= confirm or (value - boundary) * delta >= 0):
+                unit += delta
+                pending = direction = 0
+
+        shown = unit * step
+        zeros = zeros + 1 if abs(shown) <= ZERO_V03_GRAMS else 0
+        out.append(0.0 if zeros >= ZERO_V03_READINGS else shown)
+    return out
+
+
+def v03(t, values, detected_flat):
+    """Always the value of v01; v02 only has a say in the hysteresis, see hysteresis_v03()"""
+    one, soft_flat = v01(t, values)
+    return hysteresis_v03(one, soft_flat, detected_flat, average_kalman_raw(t, values))
 
 
 def rate(t):
@@ -657,8 +702,8 @@ def plot_grind(log, theme, path, show, net, raw, step):
             (t, hysteresis(*v01(t, values)), theme["trained"],
              "v01: Gerade über das längste Fenster auf %.2f g, dann Kalman (q/Fehler %.0f)"
              % (ADAPTIVE_TOLERANCE, ADAPTIVE_KALMAN[2] / ADAPTIVE_KALMAN[0])),
-            (t, hysteresis(*v03(t, values, flat_decided)), theme["mixed"],
-             "v03: v01, bei flach_v02 = 1 stattdessen v02")):
+            (t, v03(t, values, flat), theme["mixed"],
+             "v03: v01, feine Schritte nur bei flach_v01 = 1 und Zustimmung von v02")):
         # Hidden, the code for them stays: the plain moving average and the two "neu" filters, whose
         # flatness came from the slope and from sigma - trend_filter() with slope_flatness or
         # sigma_flatness still builds them
