@@ -284,14 +284,19 @@ def main():
     with Keyboard() as keyboard:
         if keyboard.live:
             print("keys: r record without a grind, s end it, q quit")
-        elif args.record is None:
-            print("no terminal for the keys, use --record <seconds> to record without a grind")
+        else:
+            print("the input is not a terminal, so the keys do not work here."
+                  " Use --record <seconds> instead")
 
         recording = False
         until = None
+        waiting_since = None # since when an answer to an "r" is being waited for
+        heard = False        # whether anything at all has arrived from the scale
+        started = time.monotonic()
         if args.record is not None:
             command(b"r")
             recording = True
+            waiting_since = time.monotonic()
             until = time.monotonic() + args.record if args.record else None
             print("recording%s" % (", %g seconds" % args.record if args.record else ", stop with Ctrl-C"))
 
@@ -301,22 +306,45 @@ def main():
             while not quitting:
                 ready = select.select([connection] + keyboard.watched(), [], [], 0.2)[0]
 
-                if connection in ready:
-                    rest += connection.read(max(1, connection.in_waiting))
+                if connection in ready and connection.in_waiting:
+                    rest += connection.read(connection.in_waiting)
+                    heard = True
                     while b"\n" in rest:
                         line, _, rest = rest.partition(b"\n")
                         reader.line(line.decode("utf-8", errors="replace"))
 
                 if sys.stdin in ready:
                     key = sys.stdin.read(1)
-                    if key == "r" and not recording:
-                        command(b"r")
-                        recording = True
-                    elif key == "s" and recording:
-                        command(b"s")
-                        recording = False
+                    if key == "r":
+                        if recording:
+                            print("already recording, 's' ends it")
+                        else:
+                            command(b"r")
+                            recording = True
+                            waiting_since = time.monotonic()
+                            print("r sent, waiting for the scale")
+                    elif key == "s":
+                        if not recording:
+                            print("nothing is being recorded, 'r' starts one")
+                        else:
+                            command(b"s")
+                            recording = False
+                            print("s sent")
                     elif key in ("q", "\x03", "\x04"):
                         quitting = True
+                    elif key.strip():
+                        print("'%s' does nothing - r records, s ends, q quits" % key)
+
+                # Saying nothing at all when something is wrong is the worst of the possible answers
+                if waiting_since and reader.grind is not None:
+                    waiting_since = None
+                elif waiting_since and time.monotonic() - waiting_since > 2:
+                    print("the scale does not answer the r. Is the firmware with the grind log on it,"
+                          " and is %s the right port?" % port)
+                    waiting_since = None
+                if not heard and time.monotonic() - started > 5:
+                    print("nothing has arrived from %s yet - right port? right baud rate?" % port)
+                    heard = True # said once is enough
 
                 if until is not None and time.monotonic() >= until:
                     break
