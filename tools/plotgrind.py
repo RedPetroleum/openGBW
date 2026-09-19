@@ -186,6 +186,8 @@ FLAT_V01_FEW = 0.8
 FLAT_V01_TIGHT = 0.7 # g
 FLAT_V01_WIDE = 1.2  # g, at this spread over the short window it is down to FLAT_V01_LOOSE
 FLAT_V01_LOOSE = 0.5
+FLAT_V01_QUIET = 0.5  # g/s, up to this rate the value is left alone
+FLAT_V01_MOVING = 1.0 # g/s, from here the weight is moving and the value is 0
 
 PLACED_V01_GRAMS = 1.5 # g, a step of more than this between two readings
 
@@ -201,13 +203,22 @@ AVERAGE_PANEL = 15  # readings the third panel averages the weight over
 CHANGE_MOST = 10.0  # g/s, the third panel shows no more than this - a cup being put on is hundreds
 
 
-def flat_v01(recent):
+def flat_v01(recent, change=0.0):
     """How flat it lies, from the spread of the readings.
 
     Twenty readings within 0.7 g are the full 1, five within 0.7 g are 0.8, and between those two it is
     interpolated over how many readings still hold. Five readings within 1.2 g are 0.5, and between
     0.7 and 1.2 g it is interpolated over the spread. Wider than that, or fewer than five readings, is 0.
+
+    On top of that the rate has a veto: `change`, how fast the weight really moves, is taken from the
+    derivative of the moving average. From FLAT_V01_MOVING on nothing is flat whatever the readings look
+    like, and between FLAT_V01_QUIET and there the value is faded out towards it.
     """
+    speed = abs(change)
+    if speed >= FLAT_V01_MOVING:
+        return 0.0
+    damped = 1.0 if speed < FLAT_V01_QUIET else \
+        1.0 - (speed - FLAT_V01_QUIET) / (FLAT_V01_MOVING - FLAT_V01_QUIET)
     if len(recent) < FLAT_V01_SHORT:
         return 0.0
     span = lambda count: max(recent[-count:]) - min(recent[-count:])
@@ -217,13 +228,13 @@ def flat_v01(recent):
         return 0.0
     if short > FLAT_V01_TIGHT: # between the two spreads, interpolated over the grams
         share = (short - FLAT_V01_TIGHT) / (FLAT_V01_WIDE - FLAT_V01_TIGHT)
-        return FLAT_V01_FEW - share * (FLAT_V01_FEW - FLAT_V01_LOOSE)
+        return damped * (FLAT_V01_FEW - share * (FLAT_V01_FEW - FLAT_V01_LOOSE))
 
     count = FLAT_V01_SHORT # how far back the readings still lie within the tight spread
     while count < min(FLAT_V01_LONG, len(recent)) and span(count + 1) <= FLAT_V01_TIGHT:
         count += 1
     share = (count - FLAT_V01_SHORT) / (FLAT_V01_LONG - FLAT_V01_SHORT)
-    return FLAT_V01_FEW + share * (1.0 - FLAT_V01_FEW)
+    return damped * (FLAT_V01_FEW + share * (1.0 - FLAT_V01_FEW))
 
 
 def placed_v01(previous, value):
@@ -622,7 +633,7 @@ def plot_grind(log, theme, path, show, net, raw, step):
     flat, placed, grinding = [], [], []
     for index in range(len(values)):
         recent = values[max(0, index - longest + 1):index + 1]
-        flat.append(flat_v01(recent))
+        flat.append(flat_v01(recent, change[index]))
         placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
         grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent, change[index]))
 
