@@ -13,6 +13,7 @@
 extern Preferences preferences;       // Preferences object
 extern HX711 loadcell;                // HX711 load cell object
 extern SimpleKalmanFilter kalmanFilter; // Kalman filter for smoothing weight measurements
+extern SimpleKalmanFilter kalmanV01;   // the one behind filter v01, set softer
 
 extern TaskHandle_t ScaleTask;        // Task handle for the scale task
 extern TaskHandle_t ScaleStatusTask;  // Task handle for the scale status task
@@ -66,10 +67,44 @@ extern bool debugMode;
 #define STATUS_INFO_MENU 8
 #define STATUS_GAME 9
 
+// Filter v01: for every reading a straight line through the longest window of the last readings that
+// the line still fits within FILTER_V01_TOLERANCE, read off at the newest reading, and a Kalman filter
+// behind it. Where the weight rests a long window fits and the value is quiet, where grounds land in
+// clumps only a short one does and it follows at once - and unlike an average a straight line does not
+// trail a rising weight however long its window is. Developed and fitted on recorded grinds, see
+// tools/plotgrind.py and tools/trainfilter.py.
+// Set to 0 for the old filter: five readings averaged into one, that one through the Kalman filter
+#define FILTER_V01 1
+#define FILTER_V01_LONGEST 40     // readings the window may grow to
+#define FILTER_V01_SHORTEST 2     // ... and never falls below
+#define FILTER_V01_TOLERANCE 0.15 // g, how far the readings may sit off the line (RMS)
+#define FILTER_V01_JUMP 1.0       // g, a difference this large is a step: taken over, window emptied
+#define FILTER_V01_KALMAN_ERROR 0.02 // measurement and estimate error of the Kalman filter behind it
+#define FILTER_V01_KALMAN_NOISE 0.02 // ... and its process noise; only the ratio of the two does anything
+#define FILTER_V01_FLAT_SLOPE 2.5 // g/s, from here on the line does not count as horizontal at all
+
+// The shown weight steps in DISPLAY_STEP grams. A step of one is only taken when the weight is
+// HYSTERESIS_GRAMS past the middle between two steps, or when HYSTERESIS_READINGS readings in a row all
+// want the same step; a difference of two steps or more is taken over as it is. Where the filter has
+// recognised the trend as flat, both are harder - a resting weight does not step, so what moves the
+// last digit there is the reading rustling. The grinding itself uses the unrounded weight
+#define DISPLAY_STEP 0.1
+#define HYSTERESIS_GRAMS 0.03
+#define HYSTERESIS_READINGS 3
+#define HYSTERESIS_FLAT_FROM 0.9 // flatness from which the harder conditions are used
+#define HYSTERESIS_GRAMS_FLAT 0.05
+#define HYSTERESIS_READINGS_FLAT 6
+
 #define CUP_WEIGHT 396.1 //war 292
 #define CUP_WEIGHT_2 76.3 // second cup
 #define CUP_DETECTION_TOLERANCE 10 // 5 grams tolerance above or bellow cup weight to detect it
-#define STEADY_READINGS 3 // this many readings in a row ...
+// v01 delivers a weight for every reading of the HX711, the old filter only for every fifth one, so
+// everything that counts readings instead of time has to be five times as much
+#if FILTER_V01
+#define STEADY_READINGS 15 // this many readings in a row ...
+#else
+#define STEADY_READINGS 3
+#endif
 #define STEADY_TOLERANCE 0.1 // ... within this many grams of each other mean the reading has settled
 
 #define LOADCELL_DOUT_PIN 19
@@ -83,7 +118,11 @@ extern bool debugMode;
 #define SIGNIFICANT_WEIGHT_CHANGE 10 // 5 grams changes are used to detect a significant change
 #define WAKE_WEIGHT_CHANGE 1.0 // a change of this many grams between two readings (e.g. tapping the scale) counts as activity
 #define WAKE_IGNORE_AFTER_TARE_MS 3000 // readings settle this long after taring, their changes do not count as activity
-#define MAX_PLAUSIBLE_WEIGHT_JUMP 3 // larger jumps between two readings are treated as spikes when stopping the grinder
+#if FILTER_V01
+#define MAX_PLAUSIBLE_WEIGHT_JUMP 0.6 // larger jumps between two readings are treated as spikes when stopping
+#else
+#define MAX_PLAUSIBLE_WEIGHT_JUMP 3   // ... five times as much, because a reading is five times as far apart
+#endif
 #define COFFEE_DOSE_WEIGHT 17.5 //war 18
 #define COFFEE_DOSE_OFFSET -1.67 //war -2.5
 #define OFFSET_CORRECTION 0.7 // share of the last deviation that is corrected into the offset; the offset
@@ -117,6 +156,7 @@ extern bool debugMode;
 // External User Variables
 extern volatile bool displayLock; // Add this declaration
 extern double scaleWeight;
+extern double shownWeight; // scaleWeight in steps of DISPLAY_STEP with the hysteresis, for the display
 extern unsigned long scaleLastUpdatedAt;
 extern unsigned long lastActivityAt; // last scale change or knob use, the display sleeps sleepTime after it
 extern unsigned long lastTareAt;

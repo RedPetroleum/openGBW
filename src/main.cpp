@@ -11,6 +11,8 @@
 Preferences preferences;             // Preferences object
 HX711 loadcell;                      // HX711 load cell object
 SimpleKalmanFilter kalmanFilter(0.02, 0.02, 0.01); // Kalman filter for weight smoothing
+SimpleKalmanFilter kalmanV01(FILTER_V01_KALMAN_ERROR, FILTER_V01_KALMAN_ERROR,
+                             FILTER_V01_KALMAN_NOISE); // the one behind filter v01
 
 TaskHandle_t ScaleTask = nullptr;    // Initialize task handles to nullptr
 TaskHandle_t ScaleStatusTask = nullptr;

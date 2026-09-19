@@ -5,6 +5,7 @@
 
 // Variables for scale functionality
 double scaleWeight = 0;       // Current weight measured by the scale
+double shownWeight = 0;       // ... in steps of DISPLAY_STEP with the hysteresis, what the display shows
 double previousScaleWeight = 0; // Weight of the reading before the current one
 double setWeight = 0;         // Target weight set by the user
 double setCupWeight = 0;      // Weight of the cup set by the user
@@ -74,9 +75,127 @@ void tareScale() {
     lastTareAt = millis();
 }
 
+// Filter v01, see config.hpp. The readings of the window and their time in seconds, oldest first;
+// a step empties the window, because the readings before it describe a different weight
+static double v01Values[FILTER_V01_LONGEST];
+static double v01Seconds[FILTER_V01_LONGEST];
+static int v01Count = 0;
+static double v01Fitted = 0; // value of the straight line, and what a step is measured against
+static double v01Slope = 0;  // its slope, which tells the display hysteresis how flat the weight lies
+static bool v01Ready = false;
+
+// Straight line through the newest `count` readings: returns its value at the newest one and writes
+// its slope and how far the readings sit off it (RMS)
+static double v01Line(int count, double *slope, double *rms) {
+    int first = v01Count - count;
+    if (count < 2) {
+        *slope = 0;
+        *rms = 0;
+        return v01Values[first];
+    }
+    double meanTime = 0, meanValue = 0;
+    for (int i = first; i < v01Count; i++) {
+        meanTime += v01Seconds[i];
+        meanValue += v01Values[i];
+    }
+    meanTime /= count;
+    meanValue /= count;
+
+    double spread = 0, mixed = 0;
+    for (int i = first; i < v01Count; i++) {
+        spread += (v01Seconds[i] - meanTime) * (v01Seconds[i] - meanTime);
+        mixed += (v01Seconds[i] - meanTime) * (v01Values[i] - meanValue);
+    }
+    *slope = spread > 0 ? mixed / spread : 0;
+
+    double squares = 0;
+    for (int i = first; i < v01Count; i++) {
+        double off = v01Values[i] - (meanValue + *slope * (v01Seconds[i] - meanTime));
+        squares += off * off;
+    }
+    *rms = sqrt(squares / count);
+    return meanValue + *slope * (v01Seconds[v01Count - 1] - meanTime);
+}
+
+// One raw reading in, the filtered weight out
+static double v01Filter(double grams, unsigned long at) {
+    if (!v01Ready) {
+        v01Fitted = grams;
+        v01Ready = true;
+    }
+    if (ABS(grams - v01Fitted) >= FILTER_V01_JUMP) {
+        v01Count = 0;
+    }
+    if (v01Count == FILTER_V01_LONGEST) {
+        for (int i = 1; i < FILTER_V01_LONGEST; i++) {
+            v01Values[i - 1] = v01Values[i];
+            v01Seconds[i - 1] = v01Seconds[i];
+        }
+        v01Count--;
+    }
+    v01Values[v01Count] = grams;
+    v01Seconds[v01Count] = at / 1000.0;
+    v01Count++;
+
+    double rms;
+    for (int count = v01Count; count >= 1; count--) {
+        v01Fitted = v01Line(count, &v01Slope, &rms);
+        if (count <= FILTER_V01_SHORTEST || rms <= FILTER_V01_TOLERANCE) {
+            break; // the longest window a straight line still fits
+        }
+    }
+    return kalmanV01.updateEstimate(v01Fitted);
+}
+
+// Rounds the weight to DISPLAY_STEP, with the hysteresis described in config.hpp. The shown value is
+// kept as a whole number of steps, otherwise adding 0.1 over and over drifts off
+static void updateShownWeight(double weight, double flatness) {
+    static int units = 0, pending = 0, direction = 0;
+    static bool started = false;
+
+    int wanted = (int)lround(weight / DISPLAY_STEP);
+    if (!started) {
+        units = wanted;
+        started = true;
+    }
+    bool strict = flatness >= HYSTERESIS_FLAT_FROM;
+    double extra = strict ? HYSTERESIS_GRAMS_FLAT : HYSTERESIS_GRAMS;
+    int confirm = strict ? HYSTERESIS_READINGS_FLAT : HYSTERESIS_READINGS;
+
+    int delta = wanted - units;
+    if (delta >= 2 || delta <= -2) {
+        units = wanted; // more than one step, the hysteresis does not apply
+        pending = direction = 0;
+    } else if (delta == 0) {
+        pending = direction = 0;
+    } else {
+        if (delta != direction) {
+            direction = delta;
+            pending = 0;
+        }
+        pending++;
+        // The middle between the two steps, moved by `extra` into the direction the weight wants to go
+        double boundary = (units + delta * 0.5) * DISPLAY_STEP + delta * extra;
+        if (pending >= confirm || (weight - boundary) * delta >= 0) {
+            units += delta;
+            pending = direction = 0;
+        }
+    }
+    shownWeight = units * DISPLAY_STEP;
+}
+
+// Hands a new weight to the rest of the firmware
+static void publishWeight(double weight, double flatness) {
+    previousScaleWeight = scaleWeight;
+    scaleWeight = weight;
+    updateShownWeight(weight, flatness);
+    scaleLastUpdatedAt = millis();
+    weightHistory.push(scaleWeight);
+    scaleReady = true;
+}
+
 // Task to continuously update the scale readings
 void updateScale(void *parameter) {
-    float lastEstimate;
     for (;;) {
         if (lastTareAt == 0) {
             Serial.println("retaring scale");
@@ -88,14 +207,14 @@ void updateScale(void *parameter) {
             }
         }
         if (loadcell.wait_ready_timeout(300)) {
-            // Single readings without the (lagging) Kalman estimate: the game needs the laser to react
-            // quickly when the scale is pressed, paging through the Weight History the same, and the
-            // Weight Chart shows what the load cell really delivers
+            // Single readings without a filter: the game needs the laser to react quickly when the scale
+            // is pressed, paging through the Weight History the same, and the Weight Chart shows what the
+            // load cell really delivers
             bool fastReadings = scaleStatus == STATUS_GAME || currentSetting == GRIND_HISTORY_SETTING ||
                                 currentSetting == WEIGHT_CHART_SETTING;
             // The readings are taken one by one instead of through get_units(n), which averages them inside
             // the library: the grind log needs every single one of them, unfiltered and at the full 10 Hz of
-            // the HX711. Their average is the same value get_units(n) would have returned
+            // the HX711, and v01 works on them one by one as well
             int bundle = fastReadings ? 1 : SCALE_READINGS_PER_UPDATE;
             double sum = 0;
             int taken = 0;
@@ -108,19 +227,29 @@ void updateScale(void *parameter) {
                 grindLogSample(raw, grams);
                 sum += grams;
                 taken++;
+#if FILTER_V01
+                // v01 is fed every reading, also while a game is running, so its window is current when
+                // the game is left. Only the published weight is the raw reading there
+                double filtered = v01Filter(grams, millis());
+                if (!fastReadings) {
+                    double flatness = 1.0 - ABS(v01Slope) / FILTER_V01_FLAT_SLOPE;
+                    publishWeight(filtered, flatness > 0 ? flatness : 0);
+                }
+#endif
             }
             if (taken == 0) {
                 Serial.println("HX711 stopped answering.");
                 scaleReady = false;
                 continue;
             }
+#if FILTER_V01
+            if (fastReadings) {
+                publishWeight(sum / taken, 0);
+            }
+#else
             float reading = sum / taken;
-            lastEstimate = kalmanFilter.updateEstimate(reading);
-            previousScaleWeight = scaleWeight;
-            scaleWeight = fastReadings ? reading : lastEstimate;
-            scaleLastUpdatedAt = millis();
-            weightHistory.push(scaleWeight);
-            scaleReady = true;
+            publishWeight(fastReadings ? reading : kalmanFilter.updateEstimate(reading), 0);
+#endif
         } else {
             Serial.println("HX711 not found.");
             scaleReady = false;

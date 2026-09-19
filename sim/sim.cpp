@@ -67,6 +67,7 @@ void u8x8_SetPin_HW_I2C(u8x8_t *u8x8, uint8_t reset, uint8_t clock, uint8_t data
 Preferences preferences;
 HX711 loadcell;
 SimpleKalmanFilter kalmanFilter(0.02, 0.02, 0.01);
+SimpleKalmanFilter kalmanV01(FILTER_V01_KALMAN_ERROR, FILTER_V01_KALMAN_ERROR, FILTER_V01_KALMAN_NOISE);
 TaskHandle_t ScaleTask = nullptr;
 TaskHandle_t ScaleStatusTask = nullptr;
 volatile bool displayLock = false;
@@ -202,7 +203,7 @@ static bool setVariable(const std::string &name, const std::string &text, int li
   if (!parseNumber(text, value))
     return fail(line, "not a number: " + text);
   if (name == "scaleWeight")
-    scaleWeight = value;
+    scaleWeight = shownWeight = value; // the filter does not run here, the display reads shownWeight
   else if (name == "setWeight")
     setWeight = value;
   else if (name == "offset")
@@ -303,7 +304,7 @@ static bool execute(const std::vector<std::string> &words, int line)
   {
     if (!numberArgument(1))
       return fail(line, "usage: weight <grams>");
-    scaleWeight = value;
+    scaleWeight = shownWeight = value;
   }
   else if (command == "set")
   {

@@ -246,7 +246,7 @@ void showScaleFactorMenu()
   snprintf(buf, sizeof(buf), "%.1f", scaleFactor);     // Format the scale factor
   CenterPrintToScreen(buf, 19);                        // Print the scale factor
   screen.setFont(u8g2_font_7x13_tr);                   // Set the font for the live weight
-  snprintf(buf, sizeof(buf), "Weight: %3.1fg", scaleWeight);
+  snprintf(buf, sizeof(buf), "Weight: %3.1fg", shownWeight);
   CenterPrintToScreen(buf, 35);                        // Print the live weight for checking
   CenterPrintToScreen("Press to save", 51);            // Print instructions
   screen.sendBuffer();                                 // Send the buffer to the display
@@ -304,7 +304,7 @@ void showCupMenu(char const *title)
   screen.setFont(u8g2_font_7x14B_tf);                // Set the font for the menu title
   CenterPrintToScreen(title, 0);                     // Print the menu title
   screen.setFont(u8g2_font_7x13_tr);                 // Set the font for the instructions
-  snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight); // Format the scale weight
+  snprintf(buf, sizeof(buf), "%3.1fg", shownWeight); // Format the scale weight
   CenterPrintToScreen(buf, 19);                      // Print the scale weight
   LeftPrintToScreen("Place cup, press", 35);         // Print instructions
   LeftPrintToScreen("Turn to cancel", 51);           // Turning leaves without saving
@@ -799,7 +799,7 @@ void refreshDisplay()
       screen.setFontPosCenter();
       screen.setFont(u8g2_font_7x14B_tf);
       screen.setCursor(3, 26);
-      snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight - cupWeightEmpty);
+      snprintf(buf, sizeof(buf), "%3.1fg", shownWeight - cupWeightEmpty);
       screen.print(buf);
 
       screen.setFontPosCenter();
@@ -812,7 +812,7 @@ void refreshDisplay()
       snprintf(buf, sizeof(buf), "%3.1fg", setWeight);
       screen.print(buf);
 
-      drawGrindProgress(setWeight > 0 ? (scaleWeight - cupWeightEmpty) / setWeight : 0);
+      drawGrindProgress(setWeight > 0 ? (shownWeight - cupWeightEmpty) / setWeight : 0);
 
       screen.setFontPosBottom();
       screen.setFont(u8g2_font_7x13_tr);
@@ -832,7 +832,7 @@ void refreshDisplay()
 
       screen.setFont(u8g2_font_7x14B_tf);
       screen.setFontPosCenter();
-      WeightPrintToScreen(abs(scaleWeight), 32);
+      WeightPrintToScreen(abs(shownWeight), 32);
 
       // Set weight is aligned on the decimal point below the measured weight, "Set:" sits left of it
       screen.setFont(u8g2_font_7x13_tf);
@@ -862,7 +862,7 @@ void refreshDisplay()
       screen.setFontPosCenter();
       screen.setFont(u8g2_font_7x14B_tf);
       screen.setCursor(3, 32);
-      snprintf(buf, sizeof(buf), "%3.1fg", scaleWeight - cupWeightEmpty);
+      snprintf(buf, sizeof(buf), "%3.1fg", shownWeight - cupWeightEmpty);
       screen.print(buf);
 
       screen.setFontPosCenter();
