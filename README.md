@@ -157,7 +157,7 @@ Three panels per grind, on a common time axis:
 
 1. **The weight** with the filters over it, drawn as the staircases they are - a filter holds its value until its next update. The one of the firmware bundles five readings into one and updates about twice a second; next to it the same Kalman filter on a *moving* average of five readings, ten times a second; and v01, which lays a straight line through the longest window that still fits the readings within 0.15 g and reads it off at the newest reading. Where the weight rests a long window fits and v01 is quiet, where grounds land in clumps only a short one does and it is quick - and unlike an average a straight line does not trail a rising weight however long its window is.
 2. **The three detectors of v01**, all between 0 and 1: `flach_v01` from the spread of the readings, `aufsetzen_v01` for a step of more than 1.5 g from one reading to the next, and `mahlen_v01` from the rate of a straight line over the last readings. Two dark bars say what really happened - a centred average, which looks as far forward as backward and therefore knows the real course of the weight, marks where the scale was standing and where it was moving.
-3. **The same three**, averaged over the last 15 readings.
+3. **How fast the weight changes**: the derivative of a moving average over the last 15 readings, in grams per second. The average itself is not drawn.
 
 Plus an overview with all grinds on top of each other, points only.
 

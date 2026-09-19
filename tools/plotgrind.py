@@ -195,7 +195,7 @@ GRIND_V01_LONG = 20  # readings over which the rate has to hold for the full 1
 GRIND_V01_SHORT = 5  # ... the fewest, they give GRIND_V01_FEW
 GRIND_V01_FEW = 0.5
 
-DETECTION_AVERAGE = 15 # readings the third panel averages the detections over
+AVERAGE_PANEL = 15 # readings the third panel averages the weight over
 
 
 def flat_v01(recent):
@@ -441,6 +441,17 @@ def v01(t, values):
     return kalman(fitted, *ADAPTIVE_KALMAN), flat
 
 
+def derivative(times, values):
+    """Change per second of a curve, from the reading before to the one after each point"""
+    out = []
+    for index in range(len(values)):
+        low = max(0, index - 1)
+        high = min(len(values) - 1, index + 1)
+        span = times[high] - times[low]
+        out.append((values[high] - values[low]) / span if span > 0 else 0.0)
+    return out
+
+
 def rate(t):
     """Readings per second, for the labels"""
     return (len(t) - 1) / (t[-1] - t[0]) if len(t) > 1 and t[-1] > t[0] else 0.0
@@ -549,7 +560,7 @@ def plot_grind(log, theme, path, show, net, raw, step):
     meta, marks, end, samples = log
     t, values = series(log, net, raw)
 
-    figure, (axis, below, smoothed) = plt.subplots(3, 1, figsize=(10, 8.4), sharex=True,
+    figure, (axis, below, changing) = plt.subplots(3, 1, figsize=(10, 8.4), sharex=True,
                                                    gridspec_kw=dict(height_ratios=[3, 1.6, 1.6]),
                                                    constrained_layout=True)
     if meta.get("kind") == "manual":
@@ -605,29 +616,36 @@ def plot_grind(log, theme, path, show, net, raw, step):
         placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
         grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent))
 
-    curves = ((flat, theme["new"], "flach_v01"),
-              (placed, theme["sigma"], "aufsetzen_v01"),
-              (grinding, theme["grind"], "mahlen_v01"))
-    for panel, average in ((below, False), (smoothed, True)):
-        for curve, color, label in curves:
-            drawn = moving_average(t, curve, DETECTION_AVERAGE)[1] if average else curve
-            panel.plot(t, drawn, linewidth=0.7, color=color, drawstyle="steps-post", zorder=3, label=label)
-            # Lightly filled underneath, so three curves that share the 0 and the 1 can still be told apart
-            panel.fill_between(t, 0, drawn, step="post", color=color, alpha=0.12, linewidth=0, zorder=2)
+    for curve, color, label in ((flat, theme["new"], "flach_v01"),
+                                (placed, theme["sigma"], "aufsetzen_v01"),
+                                (grinding, theme["grind"], "mahlen_v01")):
+        below.plot(t, curve, linewidth=0.7, color=color, drawstyle="steps-post", zorder=3, label=label)
+        # Lightly filled underneath, so three curves that share the 0 and the 1 can still be told apart
+        below.fill_between(t, 0, curve, step="post", color=color, alpha=0.12, linewidth=0, zorder=2)
+
+    # The moving average itself is not drawn, only how fast it changes
+    average = moving_average(t, values, AVERAGE_PANEL)[1]
+    changing.plot(t, derivative(t, average), linewidth=0.7, color=theme["series"][0],
+                  drawstyle="steps-post", zorder=3)
+    changing.axhline(0, color=theme["rule"], linewidth=0.7, zorder=1)
     # Above the panel, otherwise it sits on the curves, which spend much of their time at 0 and at 1
     below.legend(loc="lower right", bbox_to_anchor=(1, 1.0), ncol=3, borderaxespad=0.3)
     below.set_title("Erkennung v01  -  Balken: wirklich gestanden bzw. bewegt",
                     loc="left", color=theme["muted"])
-    smoothed.set_title("dieselben drei, über die letzten %d Messungen gemittelt" % DETECTION_AVERAGE,
+    below.set_ylim(0, 1)
+    below.set_yticks((0, 0.5, 1))
+    below.set_ylabel("Erkennung")
+    below.grid(axis="y", color=theme["grid"], linewidth=0.6)
+    below.set_axisbelow(True)
+
+    changing.set_title("Ableitung des gleitenden Durchschnitts über %d Messungen" % AVERAGE_PANEL,
                        loc="left", color=theme["muted"])
-    for panel in (below, smoothed):
-        panel.set_ylim(0, 1)
-        panel.set_yticks((0, 0.5, 1))
-        panel.set_ylabel("Erkennung")
-        panel.grid(axis="y", color=theme["grid"], linewidth=0.6)
-        panel.set_axisbelow(True)
+    changing.set_ylabel("Änderung (g/s)")
+    changing.grid(axis="y", color=theme["grid"], linewidth=0.6)
+    changing.set_axisbelow(True)
+    for panel in (below, changing):
         event_lines(panel, marks, theme, label=False)
-    smoothed.set_xlabel("Zeit seit Aufnahmestart (s)" if meta.get("kind") == "manual"
+    changing.set_xlabel("Zeit seit Aufnahmestart (s)" if meta.get("kind") == "manual"
                         else "Zeit seit Cup-Erkennung (s)")
 
     if show:
