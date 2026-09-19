@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "grindlog.hpp"
 #include "rotary.hpp"
 #include "scale.hpp"
 
@@ -92,7 +93,28 @@ void updateScale(void *parameter) {
             // Weight Chart shows what the load cell really delivers
             bool fastReadings = scaleStatus == STATUS_GAME || currentSetting == GRIND_HISTORY_SETTING ||
                                 currentSetting == WEIGHT_CHART_SETTING;
-            float reading = loadcell.get_units(fastReadings ? 1 : 5);
+            // The readings are taken one by one instead of through get_units(n), which averages them inside
+            // the library: the grind log needs every single one of them, unfiltered and at the full 10 Hz of
+            // the HX711. Their average is the same value get_units(n) would have returned
+            int bundle = fastReadings ? 1 : SCALE_READINGS_PER_UPDATE;
+            double sum = 0;
+            int taken = 0;
+            for (int i = 0; i < bundle; i++) {
+                if (i > 0 && !loadcell.wait_ready_timeout(300)) {
+                    break; // the chip stopped answering mid-bundle, the readings so far still give a weight
+                }
+                long raw = loadcell.read();
+                double grams = (raw - loadcell.get_offset()) / (double)loadcell.get_scale();
+                grindLogSample(raw, grams);
+                sum += grams;
+                taken++;
+            }
+            if (taken == 0) {
+                Serial.println("HX711 stopped answering.");
+                scaleReady = false;
+                continue;
+            }
+            float reading = sum / taken;
             lastEstimate = kalmanFilter.updateEstimate(reading);
             previousScaleWeight = scaleWeight;
             scaleWeight = fastReadings ? reading : lastEstimate;
@@ -136,6 +158,7 @@ void abortGrinding(const char *reason) {
     grinderToggle();
     grindFailReason = reason;
     scaleStatus = STATUS_GRINDING_FAILED;
+    grindLogEnd("aborted", "why=\"%s\"", reason);
     Serial.print("Grinding failed: ");
     Serial.println(reason);
 }
@@ -169,11 +192,13 @@ void scaleStatusLoop(void *p) {
                     // Same window as the cup detection, so it is guaranteed to contain readings
                     cupWeightEmpty = weightHistory.averageSince((int64_t)millis() - 1000);
                     scaleStatus = STATUS_GRINDING_IN_PROGRESS;
+                    grindLogBegin(); // from here on every reading of the load cell is logged
                     if (!scaleMode) {
                         newOffset = true;
                         startedGrindingAt = millis();
                     }
                     grinderToggle();
+                    grindLogMark("grinder_on");
                     continue;
                 }
                 break;
@@ -218,6 +243,7 @@ void scaleStatusLoop(void *p) {
                     finishedGrindingAt = millis();
                     grinderToggle(); // the grinder stops here, the dose is only confirmed in the next state
                     scaleStatus = STATUS_GRINDING_VERIFYING;
+                    grindLogMark("grinder_off w=%.2f target=%.2f", scaleWeight, targetWeight);
                     continue;
                 }
                 break;
@@ -231,6 +257,7 @@ void scaleStatusLoop(void *p) {
                 if (scaleWeight < 5) {
                     startedGrindingAt = 0;
                     scaleStatus = STATUS_EMPTY; // the cup was taken before the dose could be confirmed
+                    grindLogEnd("unverified", "why=\"cup removed\"");
                     continue;
                 }
                 // The dose counts as reached once the reading has settled; after FINISHED_MAX_WAIT it is
@@ -255,6 +282,10 @@ void scaleStatusLoop(void *p) {
                         preferences.end();
                         newOffset = false;
                     }
+                    // A second of readings is still logged after this, so the log also shows
+                    // how the scale settles once the dose is confirmed
+                    grindLogEnd("finished", "dose=%.2f dur=%.2f offset=%.2f", currentWeight - cupWeightEmpty,
+                                (finishedGrindingAt - startedGrindingAt) / 1000.0, offset);
                     scaleStatus = STATUS_GRINDING_FINISHED;
                 }
                 break;

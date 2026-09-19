@@ -78,6 +78,8 @@ extern bool debugMode;
 #define LOADCELL_SCALE_FACTOR 1760 // war 7207, davor 7351
 
 #define TARE_MEASURES 20 // use the average of measure for taring
+#define SCALE_READINGS_PER_UPDATE 5 // readings of the load cell bundled into one weight; the HX711
+                                    // delivers 10 per second, so the weight is updated twice a second
 #define SIGNIFICANT_WEIGHT_CHANGE 10 // 5 grams changes are used to detect a significant change
 #define WAKE_WEIGHT_CHANGE 1.0 // a change of this many grams between two readings (e.g. tapping the scale) counts as activity
 #define WAKE_IGNORE_AFTER_TARE_MS 3000 // readings settle this long after taring, their changes do not count as activity

@@ -106,6 +106,53 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 | Weight History | the last 10 grinds (kept after power off), turn to scroll: shot number, grinding time and used offset, press the scale for target weight, actual weight and their difference, pull it up to go back |
 | Zero Shot Count | resets the shot counter to 0 |
 
+#### Grind log over USB
+
+While a grind is running, the firmware sends every single reading of the load cell over the serial USB connection: unfiltered, unaveraged and at the full 10 Hz of the HX711, the raw material for working on the filter. Recording starts as soon as a cup has been detected and ends one second after the dose has been verified (or after an abort), so the settling of the scale is part of the log.
+
+`tools/grindlog.py` listens on the port and writes one file per grind:
+
+```sh
+pip install pyserial
+tools/grindlog.py                       # finds the port itself, the logs land in logs/
+tools/grindlog.py --port /dev/cu.usbserial-0001 --dir logs --echo
+tools/grindlog.py --replay captured.txt # take the lines from a captured serial output instead
+```
+
+The files are CSV with the description of the grind in the leading comment lines, so they read with `pandas.read_csv(path, comment="#")`:
+
+```
+# openGBW grind log v1
+# rate 10.00
+# meta {"shot": 301, "cup_empty": 396.05, "target": 17.5, "offset": -1.67, "sf": 1760.0, "tare": 8391200, "bundle": 5, ...}
+# mark {"t_ms": 0, "text": "grinder_on"}
+# mark {"t_ms": 3000, "text": "grinder_off w=412.95 target=411.88", "w": 412.95, "target": 411.88}
+# mark {"t_ms": 4500, "text": "stop reason=finished", "reason": "finished"}
+# end {"t_ms": 5500, "reason": "finished", "dose": 17.42, "dur": 3.1, "n": 56}
+t_ms,raw,g
+0,9088248,396.050
+100,9088875,396.406
+```
+
+`raw` is the 24 bit value of the HX711, `g` the same reading as grams, `(raw - tare) / sf`. `bundle` in the header is `SCALE_READINGS_PER_UPDATE` in [include/config.hpp](include/config.hpp): how many of these readings the firmware averages into one weight for the grinding itself (five, so the weight is updated twice a second). The log always contains every single reading, no matter what that value is, so a different bundling can be tried out on a recorded grind before it is built into the firmware.
+
+The format of the lines is described in [include/grindlog.hpp](include/grindlog.hpp).
+
+`tools/plotgrind.py` draws the recorded grinds (needs `matplotlib`):
+
+```sh
+tools/plotgrind.py                       # all logs in logs/, images into logs/plots/
+tools/plotgrind.py --show                # windows instead of files
+tools/plotgrind.py --net                 # weight without the cup, so the axis starts at zero
+tools/plotgrind.py --raw                 # the counts of the HX711 instead of grams
+tools/plotgrind.py --grid 0.5            # a line every 0.5 g instead of every 0.1 g
+tools/plotgrind.py --format pdf          # vector as well, SVG is the default
+```
+
+Every reading is one point, the points are not connected: what is on screen is what the load cell delivered and nothing in between. Over the points run the filters as thin lines, drawn as the staircases they are: a filter holds its value until its next update, and the one the firmware uses today (five readings bundled into one, then the Kalman filter of `main.cpp`) only updates about twice a second, against the 10 Hz of the moving average of the last five readings next to it. The third line is the new filter: a difference of a gram or more is taken over at once, everything smaller is followed through the slope of a straight line laid through the last five readings, which is what keeps it from trailing a rising weight. The flatter that line is, and the longer it has already been flat, the harder the result is smoothed on top - so the filter follows a moving weight without delay and slowly turns into an average once the scale comes to rest. There are two of it, differing in nothing but how they recognise a flat stretch: one takes the slope of that same line, the other the sigma of the last five readings - a resting scale only carries the noise of the load cell, normally distributed around the true weight, so its sigma stays small, while a moving weight pulls the readings apart. The shading behind the curves says where a flat stretch was found; a panel under each grind shows that same value as a curve between 0 and 1, together with the threshold from which the harder hysteresis is in force. Under the curve it also draws the truth that the formulas are fitted against: two bars saying where a centred average - which looks as far forward as backward and therefore knows the real course of the weight - says the scale really was standing or really moving. The panel shows the fitted formula by default, `--flat v01`, `--flat sigma` and `--flat slope` show the other three. The fitted one comes from [tools/trainflat.py](tools/trainflat.py): a logistic regression on the spread of the readings over the last 5, 10, 20 and 40 of them. The short window reacts at once, the long ones only become small once the weight has been standing for a while, which is where "the longer it is straight, the surer" comes from - no counter and no threshold.
+
+The last line is the trained filter. For every reading it takes the longest window over which a straight line still fits the readings within 0.15 g and reads that line off at the newest reading: where the weight rests a long window fits and the result is quiet, where it moves in clumps only a short one does and the result is quick. Its parameters were searched on the recordings with [tools/trainfilter.py](tools/trainfilter.py), which measures three things separately - how straight the filter is while the weight rests at the start and at the end, and how far it is from a centred (and therefore lag-free) average while the weight rises. Behind it runs the Kalman filter of the firmware, set soft: of its three values only the ratio of the process noise to the measurement error does anything, and at the ratio of one set here the reading comes to rest most quietly. A larger ratio follows the middle more closely, a smaller one makes the filter lag into the settling after the grinder stops. What it shows is finally rounded to 0.1 g with a hysteresis: a step of one is only taken when the value is 0.03 g past the middle between the two steps, or when three readings in a row all want the same step; a difference of two steps or more is taken over as it is. Where the filter has recognised the trend as flat, both conditions are harder - a full step past the shown value, or six readings in a row - because a resting weight does not step and what moves the last digit there is the reading rustling. Its settings are `JUMP_GRAMS`, `TREND_WINDOW`, `FLAT_SLOPE`, `FLAT_READINGS`, `FLAT_ALPHA`, `SIGMA_WINDOW`, `SIGMA_FLAT`, `SIGMA_STEEP`, `DISPLAY_STEP`, `HYSTERESIS_GRAMS` and `HYSTERESIS_READINGS` at the top of the script. Their settings are the constants `BUNDLE`, `KALMAN` and `AVERAGE_WINDOW` at the top of the script. The overview stays at the points, three grinds with their filters cannot be told apart. The grid has a line every 0.1 g and a label every whole gram. Per grind one image with the markers of the grind drawn in, plus an overview with all grinds on top of each other. Three filters are drawn: the one of the firmware, the same Kalman filter on a moving average of five readings instead of on bundles of five, and v01. The script also holds the two filters whose smoothing is gated by a flatness measure, from the slope and from sigma; they are not drawn. The images are SVG, so they can be zoomed into without the points turning into blocks; `--show` opens the matplotlib windows instead, where the same can be done interactively.
+
 #### Games
 
 All games use the scale as a pressure sensor: remove the cup and press on the scale with your finger. Press the knob during a game to pause or exit (hold it in Doom). The best score of each game is saved.

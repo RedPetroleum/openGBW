@@ -7,7 +7,7 @@ ROOT := ..
 U8G2 := $(ROOT)/.pio/libdeps/esp32_usb/U8g2/src
 BUILD := build
 
-FIRMWARE_SOURCES := $(ROOT)/src/display.cpp $(ROOT)/src/rotary.cpp $(ROOT)/src/scale.cpp $(wildcard $(ROOT)/src/games/*.cpp)
+FIRMWARE_SOURCES := $(ROOT)/src/display.cpp $(ROOT)/src/grindlog.cpp $(ROOT)/src/rotary.cpp $(ROOT)/src/scale.cpp $(wildcard $(ROOT)/src/games/*.cpp)
 U8G2_SOURCES := $(wildcard $(U8G2)/clib/*.c) $(U8G2)/U8g2lib.cpp
 
 # ARDUINO changes the layout of the U8g2 structs, so it is defined for all files
