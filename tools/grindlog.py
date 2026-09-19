@@ -10,13 +10,15 @@ of one grind and writes them into their own file, one per grind:
     tools/grindlog.py --echo                # also show the other serial output of the firmware
     tools/grindlog.py --replay captured.txt # take the lines from a file instead of the port
 
-It can also record without a grind, for the noise of a resting scale or for weights put on by hand:
+It also records without a grind, for the noise of a resting scale or for weights put on by hand. While
+it is listening, the keys do that:
 
-    tools/grindlog.py --record 30           # record 30 seconds, then stop
-    tools/grindlog.py --record 0            # record until Ctrl-C
+    r   start a recording, whatever the scale is doing
+    s   end it
+    q   quit
 
-The scale is told to do that with an "r" over the same connection and stopped again with an "s". A
-grind that starts during such a recording does not interrupt it, it only leaves its markers in it.
+A grind that starts during such a recording does not interrupt it, it only leaves its markers in it.
+For a script there is --record <seconds> instead, which needs no keyboard.
 
 The files are CSV with the description of the grind in the leading comment lines, so they can be read with
 pandas.read_csv(path, comment="#") and the comments with json.loads of everything after "# meta " etc.
@@ -28,8 +30,15 @@ import glob
 import json
 import os
 import re
+import select
 import sys
 import time
+
+try:
+    import termios
+    import tty
+except ImportError: # not a terminal that can do this, the keys are then unavailable
+    termios = None
 
 PREFIX = "GBW>"
 FIELD = re.compile(r'([A-Za-z_][A-Za-z_0-9]*)=("[^"]*"|\S*)')
@@ -133,7 +142,7 @@ class Reader:
                 self.finish("the previous grind was never finished")
             self.grind = Grind(fields(rest))
             if self.grind.meta.get("kind") == "manual":
-                print("recording by hand, stop it with Ctrl-C")
+                print("recording by hand")
             else:
                 print("recording: shot %s, cup %s g" % (self.grind.meta.get("shot", "?"),
                                                         self.grind.meta.get("cup_empty", "?")))
@@ -195,6 +204,27 @@ def load(path):
     return meta, marks, end, samples
 
 
+class Keyboard:
+    """Single keypresses, without waiting for Enter. Does nothing where that is not possible"""
+
+    def __init__(self):
+        self.live = termios is not None and sys.stdin.isatty()
+        self.saved = None
+
+    def __enter__(self):
+        if self.live:
+            self.saved = termios.tcgetattr(sys.stdin)
+            tty.setcbreak(sys.stdin.fileno())
+        return self
+
+    def __exit__(self, *ignored):
+        if self.saved is not None:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.saved)
+
+    def watched(self):
+        return [sys.stdin] if self.live else []
+
+
 def find_port():
     """The serial port of the ESP32, as it is called on macOS and on Linux"""
     for pattern in ("/dev/cu.usbserial*", "/dev/cu.wchusbserial*", "/dev/cu.SLAB_USBtoUART*",
@@ -213,7 +243,8 @@ def main():
     parser.add_argument("--echo", action="store_true", help="also show the other serial output")
     parser.add_argument("--replay", help="read the lines from this file instead of the serial port")
     parser.add_argument("--record", type=float, metavar="SECONDS", nargs="?", const=0.0,
-                        help="record without a grind for this long, 0 or no number: until Ctrl-C")
+                        help="for scripts: start a recording at once and run it this long "
+                             "(0 or no number: until Ctrl-C), instead of using the keys")
     args = parser.parse_args()
 
     os.makedirs(args.dir, exist_ok=True)
@@ -240,40 +271,71 @@ def main():
     connection = serial.Serial()
     connection.port = port
     connection.baudrate = args.baud
-    connection.timeout = 1
+    connection.timeout = 0.2
     connection.dtr = False  # opening the port must not reset the ESP32 and interrupt a grind
     connection.rts = False
     connection.open()
-    print("listening on %s at %d baud, the logs land in %s/ (stop with Ctrl-C)" % (port, args.baud, args.dir))
+    print("listening on %s at %d baud, the logs land in %s/" % (port, args.baud, args.dir))
 
-    until = None
-    if args.record is not None:
-        connection.write(b"r") # tells the scale to record without waiting for a grind
-        until = time.monotonic() + args.record if args.record else None
-        print("recording without a grind%s"
-              % (", %g seconds" % args.record if args.record else ", until Ctrl-C"))
+    def command(letter):
+        connection.write(letter)
+        connection.flush()
 
-    try:
-        while True:
-            line = connection.readline()
-            if line:
-                reader.line(line.decode("utf-8", errors="replace"))
-            if until is not None and time.monotonic() >= until:
-                break
-    except KeyboardInterrupt:
-        pass
-    finally:
+    with Keyboard() as keyboard:
+        if keyboard.live:
+            print("keys: r record without a grind, s end it, q quit")
+        elif args.record is None:
+            print("no terminal for the keys, use --record <seconds> to record without a grind")
+
+        recording = False
+        until = None
         if args.record is not None:
-            connection.write(b"s") # ends the recording, the scale still sends its last second
-            connection.flush()
-            stop = time.monotonic() + 3
-            while reader.grind is not None and time.monotonic() < stop:
-                line = connection.readline()
-                if line:
+            command(b"r")
+            recording = True
+            until = time.monotonic() + args.record if args.record else None
+            print("recording%s" % (", %g seconds" % args.record if args.record else ", stop with Ctrl-C"))
+
+        rest = b""
+        quitting = False
+        try:
+            while not quitting:
+                ready = select.select([connection] + keyboard.watched(), [], [], 0.2)[0]
+
+                if connection in ready:
+                    rest += connection.read(max(1, connection.in_waiting))
+                    while b"\n" in rest:
+                        line, _, rest = rest.partition(b"\n")
+                        reader.line(line.decode("utf-8", errors="replace"))
+
+                if sys.stdin in ready:
+                    key = sys.stdin.read(1)
+                    if key == "r" and not recording:
+                        command(b"r")
+                        recording = True
+                    elif key == "s" and recording:
+                        command(b"s")
+                        recording = False
+                    elif key in ("q", "\x03", "\x04"):
+                        quitting = True
+
+                if until is not None and time.monotonic() >= until:
+                    break
+        except KeyboardInterrupt:
+            pass
+
+        # The scale sends its last second after the "s", so the end of the file is waited for
+        if recording:
+            command(b"s")
+            deadline = time.monotonic() + 3
+            while reader.grind is not None and time.monotonic() < deadline:
+                rest += connection.read(max(1, connection.in_waiting or 1))
+                while b"\n" in rest:
+                    line, _, rest = rest.partition(b"\n")
                     reader.line(line.decode("utf-8", errors="replace"))
-        reader.finish("stopped in the middle of a recording")
-        print("\n%d recordings written" % reader.count)
-        connection.close()
+
+    reader.finish("stopped in the middle of a recording")
+    print("%d recordings written" % reader.count)
+    connection.close()
     return 0
 
 
