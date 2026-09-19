@@ -189,13 +189,14 @@ FLAT_V01_LOOSE = 0.5
 
 PLACED_V01_GRAMS = 1.5 # g, a step of more than this between two readings
 
-GRIND_V01_CORE = (0.5, 3.5) # g/s, in here the full value is possible
-GRIND_V01_WIDE = (0.4, 4.0) # g/s, outside of this it is nothing, in between it fades
+GRIND_V01_CORE = (0.5, 5.5) # g/s, in here the full value is possible
+GRIND_V01_WIDE = (0.4, 6.0) # g/s, outside of this it is nothing, in between it fades
 GRIND_V01_LONG = 20  # readings over which the rate has to hold for the full 1
 GRIND_V01_SHORT = 5  # ... the fewest, they give GRIND_V01_FEW
 GRIND_V01_FEW = 0.5
 
-AVERAGE_PANEL = 15 # readings the third panel averages the weight over
+AVERAGE_PANEL = 15  # readings the third panel averages the weight over
+CHANGE_MOST = 10.0  # g/s, the third panel shows no more than this - a cup being put on is hundreds
 
 
 def flat_v01(recent):
@@ -641,6 +642,10 @@ def plot_grind(log, theme, path, show, net, raw, step):
     changing.set_title("Ableitung des gleitenden Durchschnitts über %d Messungen" % AVERAGE_PANEL,
                        loc="left", color=theme["muted"])
     changing.set_ylabel("Änderung (g/s)")
+    # Capped: putting a cup on produces hundreds of g/s and would flatten everything else to a line
+    change = derivative(t, average)
+    low, high = min(change), max(change)
+    changing.set_ylim(max(-CHANGE_MOST, low - 0.5), min(CHANGE_MOST, high + 0.5))
     changing.grid(axis="y", color=theme["grid"], linewidth=0.6)
     changing.set_axisbelow(True)
     for panel in (below, changing):
