@@ -187,13 +187,15 @@ FLAT_V01_TIGHT = 0.7 # g
 FLAT_V01_WIDE = 1.2  # g, at this spread over the short window it is down to FLAT_V01_LOOSE
 FLAT_V01_LOOSE = 0.5
 
-PLACED_V01_GRAMS = 1.0 # g, a step of more than this between two readings
+PLACED_V01_GRAMS = 1.5 # g, a step of more than this between two readings
 
 GRIND_V01_CORE = (0.5, 3.5) # g/s, in here the full value is possible
 GRIND_V01_WIDE = (0.4, 4.0) # g/s, outside of this it is nothing, in between it fades
 GRIND_V01_LONG = 20  # readings over which the rate has to hold for the full 1
 GRIND_V01_SHORT = 5  # ... the fewest, they give GRIND_V01_FEW
 GRIND_V01_FEW = 0.5
+
+DETECTION_AVERAGE = 15 # readings the third panel averages the detections over
 
 
 def flat_v01(recent):
@@ -541,15 +543,15 @@ def flat_shading(axis, t, strength, color, strongest=0.3, levels=8):
         start = index
 
 
-def plot_grind(log, theme, path, show, net, raw, step, flat):
+def plot_grind(log, theme, path, show, net, raw, step):
     import matplotlib.pyplot as plt
 
     meta, marks, end, samples = log
     t, values = series(log, net, raw)
 
-    figure, (axis, below) = plt.subplots(2, 1, figsize=(10, 7), sharex=True,
-                                         gridspec_kw=dict(height_ratios=[3, 1.6]),
-                                         constrained_layout=True)
+    figure, (axis, below, smoothed) = plt.subplots(3, 1, figsize=(10, 8.4), sharex=True,
+                                                   gridspec_kw=dict(height_ratios=[3, 1.6, 1.6]),
+                                                   constrained_layout=True)
     if meta.get("kind") == "manual":
         title = "Aufnahme von Hand  -  %.1f s, %d Messungen" % (t[-1] - t[0], len(samples))
     else:
@@ -575,26 +577,11 @@ def plot_grind(log, theme, path, show, net, raw, step, flat):
         # sigma_flatness still builds them
         axis.plot(when, filtered, linewidth=0.7, color=color, label=label, zorder=4,
                   drawstyle="steps-post")
-    from matplotlib.patches import Patch
     handles, _ = axis.get_legend_handles_labels()
-    shading = {"v01": (theme["trained"], "v01", 0.13), "sigma": (theme["sigma"], "Sigma", 0.3),
-               "slope": (theme["new"], "Steigung", 0.3),
-               "learned": (theme["new"], "trainierte Formel", 0.3)}[flat]
-    handles.append(Patch(facecolor=shading[0], alpha=shading[2], linewidth=0,
-                         label="flach erkannt (%s), dort gilt die härtere Hysterese" % shading[1]))
     axis.legend(handles=handles, loc="upper left")
     axis.set_ylabel(unit(net, raw))
     grid(axis, theme, step, meta.get("sf", 1.0) if raw else 0)
     event_lines(axis, marks, theme)
-    if flat == "v01":
-        strength = v01(t, values)[1]
-    elif flat == "learned":
-        strength = [learned_flatness(values[max(0, i - max(LEARNED_WINDOWS) + 1):i + 1])
-                    for i in range(len(values))]
-    else:
-        strength = trend_filter(t, values, sigma_flatness if flat == "sigma" else slope_flatness)[2]
-    flat_shading(axis, t, strength, shading[0], shading[2])
-
     # The same value once more as a curve: what the shading only hints at through its depth can be read
     # off here, together with the threshold from which the harder hysteresis is in force
     # The truth underneath, as a check: where the centred average says the scale really was standing or
@@ -617,22 +604,31 @@ def plot_grind(log, theme, path, show, net, raw, step, flat):
         flat.append(flat_v01(recent))
         placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
         grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent))
-    for curve, color, label in ((flat, theme["new"], "flach_v01"),
-                                (placed, theme["sigma"], "aufsetzen_v01"),
-                                (grinding, theme["grind"], "mahlen_v01")):
-        below.plot(t, curve, linewidth=0.7, color=color, drawstyle="steps-post", zorder=3, label=label)
+
+    curves = ((flat, theme["new"], "flach_v01"),
+              (placed, theme["sigma"], "aufsetzen_v01"),
+              (grinding, theme["grind"], "mahlen_v01"))
+    for panel, average in ((below, False), (smoothed, True)):
+        for curve, color, label in curves:
+            drawn = moving_average(t, curve, DETECTION_AVERAGE)[1] if average else curve
+            panel.plot(t, drawn, linewidth=0.7, color=color, drawstyle="steps-post", zorder=3, label=label)
+            # Lightly filled underneath, so three curves that share the 0 and the 1 can still be told apart
+            panel.fill_between(t, 0, drawn, step="post", color=color, alpha=0.12, linewidth=0, zorder=2)
     # Above the panel, otherwise it sits on the curves, which spend much of their time at 0 and at 1
     below.legend(loc="lower right", bbox_to_anchor=(1, 1.0), ncol=3, borderaxespad=0.3)
     below.set_title("Erkennung v01  -  Balken: wirklich gestanden bzw. bewegt",
                     loc="left", color=theme["muted"])
-    below.set_ylim(0, 1)
-    below.set_yticks((0, 0.5, 1))
-    below.set_ylabel("Erkennung")
-    below.set_xlabel("Zeit seit Aufnahmestart (s)" if meta.get("kind") == "manual"
-                     else "Zeit seit Cup-Erkennung (s)")
-    below.grid(axis="y", color=theme["grid"], linewidth=0.6)
-    below.set_axisbelow(True)
-    event_lines(below, marks, theme, label=False)
+    smoothed.set_title("dieselben drei, über die letzten %d Messungen gemittelt" % DETECTION_AVERAGE,
+                       loc="left", color=theme["muted"])
+    for panel in (below, smoothed):
+        panel.set_ylim(0, 1)
+        panel.set_yticks((0, 0.5, 1))
+        panel.set_ylabel("Erkennung")
+        panel.grid(axis="y", color=theme["grid"], linewidth=0.6)
+        panel.set_axisbelow(True)
+        event_lines(panel, marks, theme, label=False)
+    smoothed.set_xlabel("Zeit seit Aufnahmestart (s)" if meta.get("kind") == "manual"
+                        else "Zeit seit Cup-Erkennung (s)")
 
     if show:
         plt.show()
@@ -675,8 +671,6 @@ def main():
                         help="grams between two lines of the grid (0.1)")
     parser.add_argument("--format", default="svg", choices=("svg", "pdf", "png"),
                         help="file format, vector by default (svg)")
-    parser.add_argument("--flat", default="learned", choices=("learned", "v01", "sigma", "slope"),
-                        help="whose flat stretches the shading and the panel show (learned)")
     args = parser.parse_args()
 
     paths = args.logs or sorted(glob.glob("logs/*.csv"))
@@ -697,7 +691,7 @@ def main():
             continue
         logs.append(log)
         target = os.path.join(args.out, os.path.splitext(os.path.basename(path))[0] + "." + args.format)
-        plot_grind(log, theme, target, args.show, args.net, args.raw, args.grid, args.flat)
+        plot_grind(log, theme, target, args.show, args.net, args.raw, args.grid)
         print(path if args.show else target)
 
     if len(logs) > 1:
