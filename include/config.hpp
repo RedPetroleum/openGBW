@@ -57,7 +57,8 @@ struct GrindRecord
 // How the initializing screen shows that the scale is getting ready
 #define BOOT_STYLE_BAR 0     // a bar under the cup
 #define BOOT_STYLE_FRAME 1   // a border grows around the screen, like the frame style of the grinding screen
-#define BOOT_STYLE_COUNT 2
+#define BOOT_STYLE_CROSS 2   // nothing but a big cross that turns a quarter around until the scale is ready
+#define BOOT_STYLE_COUNT 3
 #define BOOT_STYLE_DEFAULT BOOT_STYLE_FRAME
 #define WEIGHT_DATA_SIZE 128 // readings it keeps, one per pixel column; the grind also works on them
 

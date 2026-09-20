@@ -5,7 +5,10 @@
 boot 700; shot boot
 boot 1500; shot boot-turned # the cup turns while the border grows
 boot 2900; shot boot-ready # shortly before the border is closed
-set bootScreenStyle 0; boot 1500; shot boot-bar # the other style of the Style menu
+set bootScreenStyle 0; boot 1500; shot boot-bar # the other styles of the Style menu
+
+[initializing cross]
+set bootScreenStyle 2; boot 750; shot boot-cross # turns a quarter clockwise until the scale is ready
 
 [main screen]
 shot main

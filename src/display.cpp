@@ -208,7 +208,7 @@ void showGrindScreenMenu()
   screen.sendBuffer();
 }
 
-static const char *bootStyleNames[BOOT_STYLE_COUNT] = {"Bar", "Frame (default)"};
+static const char *bootStyleNames[BOOT_STYLE_COUNT] = {"Bar", "Frame (default)", "Cross"};
 
 // How the initializing screen shows that the scale is getting ready, turning switches, clicking saves
 void showBootScreenMenu()
@@ -807,6 +807,33 @@ static void bootDrawRing(float radius, float height, float turn)
 // that fills while the scale tares
 static void drawProgressFrame(float shown, bool complete); // drawn with the progress screens below
 
+// The cross style of the initializing screen: nothing but a cross through the middle of the screen that
+// turns a quarter clockwise while the scale gets ready. Its arms are only limited by the edge of the
+// display, so they are always as long as they can be and grow and shrink as it turns.
+static void drawBootCross(float progress)
+{
+  const float centerX = 63.5f, centerY = 31.5f;
+  float angle = progress * PI / 2; // clockwise, the rows grow downwards
+  for (int arm = 0; arm < 4; arm++)
+  {
+    float dx = cos(angle + arm * PI / 2);
+    float dy = sin(angle + arm * PI / 2);
+    float length = 1000; // how far the arm goes before it leaves the display
+    if (fabsf(dx) > 0.001f)
+    {
+      length = min(length, ((dx > 0 ? 127.0f : 0.0f) - centerX) / dx);
+    }
+    if (fabsf(dy) > 0.001f)
+    {
+      length = min(length, ((dy > 0 ? 63.0f : 0.0f) - centerY) / dy);
+    }
+    // The ends are rounded as a distance from the middle, so an arm that runs straight stays straight
+    int x = lroundf(centerX), y = lroundf(centerY);
+    screen.drawLine(x, y, constrain(x + (int)lroundf(dx * length), 0, 127),
+                    constrain(y + (int)lroundf(dy * length), 0, 63));
+  }
+}
+
 static void drawBootScreen()
 {
   if (bootStartedAt == 0)
@@ -814,6 +841,13 @@ static void drawBootScreen()
     bootStartedAt = millis();
   }
   unsigned long elapsed = millis() - bootStartedAt;
+  // All styles fill evenly over the time the scale needs to get ready
+  float progress = min(1.0f, elapsed / (float)BOOT_READY_MS);
+  if (bootScreenStyle == BOOT_STYLE_CROSS)
+  {
+    drawBootCross(progress); // this style is the whole screen, the cup stays out of it
+    return;
+  }
   float turn = elapsed % BOOT_TURN_MS / (float)BOOT_TURN_MS * 2 * PI;
 
   bootDrawRing(BOOT_CUP_RADIUS_TOP, BOOT_CUP_TOP, turn);
@@ -844,8 +878,6 @@ static void drawBootScreen()
     previousY = y;
   }
 
-  // Both styles fill evenly over the time the scale needs to get ready
-  float progress = min(1.0f, elapsed / (float)BOOT_READY_MS);
   if (bootScreenStyle == BOOT_STYLE_FRAME)
   {
     drawProgressFrame(progress, true); // the border closes when the scale is ready
