@@ -1147,13 +1147,13 @@ static void drawDelayDetails()
   char values[FINISHED_DETAIL_ROWS][16];
   values[0][0] = 0; // the first row is the heading of the page
   snprintf(values[1], sizeof(values[1]), "%.0f", delayUsed * 1000);
-  if (delayMeasured > 0)
+  if (isnan(delayMeasured))
   {
-    snprintf(values[2], sizeof(values[2]), "%.0f", delayMeasured * 1000);
+    strcpy(values[2], "-"); // too little flow at the switch-off to measure it
   }
   else
   {
-    strcpy(values[2], "-"); // too little flow at the switch-off to measure it
+    snprintf(values[2], sizeof(values[2]), "%.0f", delayMeasured * 1000); // a negative one as it is
   }
   snprintf(values[3], sizeof(values[3]), "%.0f", delayEnd * 1000);
 

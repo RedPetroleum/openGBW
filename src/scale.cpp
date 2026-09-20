@@ -55,8 +55,12 @@ unsigned long verifyingFrom = 0; // from when readings count towards the dose, s
 unsigned long doseVerifiedFrom = 0;
 double confirmedDose = 0; // g, the dose the grind was confirmed with, the one the delay is
                           // calibrated from; it stands still while the screen shows it
-double delayUsed = 0;     // s, the delay the last grind was stopped with ...
-double delayMeasured = 0; // ... and the one its dose says it really was, 0 where it says nothing
+double delayUsed = 0;       // s, the delay the last grind was stopped with ...
+double delayMeasured = NAN; // ... and the one its dose says it really was, NAN where it says nothing.
+                            // It is kept as it comes out, a negative one included: that means more was
+                            // on the scale at the switch-off than in the end, which says something
+                            // about the line the grind was stopped on. Only the calibration below
+                            // takes it within its limits
 const char *grindFailReason = ""; // Why the last grind was aborted, shown on the display
 
 // Tares the scale (sets the current weight to zero). A tare is wanted while lastTareAt is zero, and
@@ -712,10 +716,11 @@ static void calibrateDelay(double finalDose) {
     if (flowAtSwitchOff < DELAY_MIN_FLOW) {
         return; // too slow to divide by, the grind says nothing about the delay and it is left alone
     }
-    double measured = constrain((finalDose - doseAtSwitchOff) / flowAtSwitchOff, DELAY_MIN, DELAY_MAX);
-    delayMeasured = measured; // what this grind says, the finished screen shows it next to the rest
-    delayEnd = constrain(delayEnd + DELAY_CORRECTION * (measured - delayEnd),
-                            DELAY_MIN, DELAY_MAX);
+    double measured = (finalDose - doseAtSwitchOff) / flowAtSwitchOff;
+    delayMeasured = measured; // as it comes out, the finished screen shows it next to the rest
+    // Only a delay between the limits is a delay the next grind can be stopped with
+    double usable = constrain(measured, DELAY_MIN, DELAY_MAX);
+    delayEnd = constrain(delayEnd + DELAY_CORRECTION * (usable - delayEnd), DELAY_MIN, DELAY_MAX);
 }
 
 // Switches to the failed state, which is left by pressing the knob. The grinder is only toggled where
@@ -854,7 +859,8 @@ void scaleStatusLoop(void *p) {
                     doseAtSwitchOff = 0;
                     doseVerifiedFrom = 0;
                     confirmedDose = 0;
-                    delayUsed = delayMeasured = 0;
+                    delayUsed = 0;
+                    delayMeasured = NAN;
                     stopLineFromReading = stopLineAt = switchOffAt = 0;
                     stopLineDose = 0;
                     grinderToggle();

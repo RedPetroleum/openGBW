@@ -312,7 +312,8 @@ double verifiedDose();                 // that average, what the finished screen
 extern double confirmedDose;    // g, the dose the grind was confirmed with, the delay is calibrated from it
 extern double flowAtSwitchOff;  // g/s, the mass flow at the moment the grinder was switched off
 extern double delayUsed;     // s, the delay the last grind was stopped with ...
-extern double delayMeasured; // ... and the one its dose says it really was, 0 where it says nothing
+extern double delayMeasured; // ... and the one its dose says it really was (may be negative),
+                             // NAN where it says nothing
 extern double setWeight;
 extern double delayEnd;    // s the grinder keeps delivering after the switch-off, calibrated per grind
 extern double grindFlow;   // g/s, the mass flow the running grind is being stopped by
