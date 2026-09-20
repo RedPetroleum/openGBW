@@ -300,6 +300,8 @@ extern int scaleStatus;
 extern double cupWeightEmpty;
 extern unsigned long startedGrindingAt;
 extern unsigned long finishedGrindingAt;
+extern unsigned long doseVerifiedFrom; // from when the readings are averaged into the confirmed dose
+double verifiedDose();                 // that average, what the finished screen judges the grind by
 extern double setWeight;
 extern double deadTimeEnd; // s the grinder keeps delivering after the switch-off, calibrated per grind
 extern double grindFlow;   // g/s, the mass flow the running grind is being stopped by

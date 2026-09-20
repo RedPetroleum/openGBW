@@ -19,10 +19,25 @@ wait 600; set grindTime 4.2 # the progress bar follows the reading smoothly, giv
 draw; shot grinding
 set scaleStatus 6; weight 412.5; set grindTime 7.9
 wait 600; set grindTime 7.9; draw; shot verifying # grinder off, waiting for a steady reading
-set scaleStatus 2; weight 413.6; set grindTime 7.9
-draw; shot grinding-finished
 set scaleStatus 3; set grindFailReason Cup removed
 draw; shot grinding-failed
+
+# The finished screen averages the raw readings from the moment the dose was confirmed, so each of
+# these sections feeds a second of readings and then enters the screen with "verifiedAgo"
+[grinding finished]
+set cupWeightEmpty 396.1; set grindTime 7.9
+weight 413.50; wait 400; weight 413.56; wait 400; weight 413.53; wait 400
+set verifiedAgo 1.2; set scaleStatus 2; draw; shot grinding-finished # 0.07 g under the target
+
+[grinding finished, off target]
+set cupWeightEmpty 396.1; set grindTime 7.9
+weight 414.15; wait 400; weight 414.21; wait 400; weight 414.18; wait 400
+set verifiedAgo 1.2; set scaleStatus 2; draw; shot grinding-finished-wide # the scale has grown with it
+
+[grinding finished, far off target]
+set cupWeightEmpty 396.1; set grindTime 7.9
+weight 415.07; wait 400; weight 415.13; wait 400; weight 415.10; wait 400
+set verifiedAgo 1.2; set scaleStatus 2; draw; shot grinding-finished-coarse # ticks a gram apart
 
 [grinding screen styles]
 # a recorded grind (logs/, shot 327) in the curve style of the Style menu, one reading every 360ms

@@ -81,6 +81,27 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define PROGRESS_FRAME_THICKNESS 2 // thickness of the border that grows around the screen
 #define GRIND_PROGRESS_EASING 8.0f // how fast the drawn progress follows the reading (1/s), the scale only reports twice a second
 
+// Finished screen: how far the dose ended up from the set weight, as a bar from the middle of a scale
+// that carries the set weight in its middle. At its finest the scale reaches DEVIATION_RANGE_MIN to
+// either side; a deviation that needs more room widens it, so the bar always stays on the scale. The
+// ticks keep their value in grams while their spacing shrinks with the growing scale - once more than
+// DEVIATION_TICKS_MAX of them would fit on one side they are a gram apart instead of a tenth
+#define DEVIATION_RANGE_MIN 0.2   // g, half of the scale at its finest resolution
+#define DEVIATION_RANGE_FILL 0.85 // the bar reaches at most this much of the half scale
+#define DEVIATION_RANGE_EASING 4.0f // how fast the drawn scale follows a growing deviation (1/s)
+#define DEVIATION_TICK_FINE 0.1   // g between two ticks ...
+#define DEVIATION_TICK_COARSE 1.0 // ... and once there would be too many of them
+#define DEVIATION_TICKS_MAX 10    // ticks per side the fine ones are still drawn at
+#define DEVIATION_AXIS_Y 38       // row of the thin line the scale is drawn on
+#define DEVIATION_HALF_WIDTH 60   // pixels from the middle of the scale to either end
+#define DEVIATION_END_HEIGHT 7    // the marks at the ends stand this tall on the line ...
+#define DEVIATION_TICK_HEIGHT 4   // ... the ticks between them this tall
+#define DEVIATION_TICK_MIN_GAP 2  // a tick this close to the end of the scale is left out, it would only
+                                  // cancel the mark there out again
+#define DEVIATION_ZERO_ABOVE 9    // the mark for the set weight starts this far above the line ...
+#define DEVIATION_ZERO_HEIGHT 13  // ... and reaches past it
+#define DEVIATION_BAR_HEIGHT 5    // thickness of the bar from the middle to the dose
+
 // A weight that rounds to zero is shown without a sign: a reading a few hundredths below the cup
 // weight would otherwise appear as "-0.0" while the grinder is running
 static double noMinusZero(double weight)
@@ -987,6 +1008,51 @@ static void showGrindProgress(float progress, bool complete)
   }
 }
 
+static float deviationRangeShown = 0; // half of the drawn scale in grams, follows the deviation smoothly
+static unsigned long deviationDrawnAt = 0; // Time of the last update of the scale
+
+// The deviation of the dose from the set weight: the set weight is the mark in the middle, the bar
+// runs from there to where the dose ended up. The scale grows with the deviation, see the
+// DEVIATION_ defines above
+static void drawDeviationScale(double deviation)
+{
+  float wanted = max((float)DEVIATION_RANGE_MIN, (float)(fabs(deviation) / DEVIATION_RANGE_FILL));
+  unsigned long now = millis();
+  float dt = min((now - deviationDrawnAt) / 1000.0f, 0.1f);
+  deviationDrawnAt = now;
+  // The first frame of a grind starts on the scale it needs, from there it follows smoothly
+  deviationRangeShown = deviationRangeShown <= 0
+                            ? wanted
+                            : deviationRangeShown +
+                                  (wanted - deviationRangeShown) * min(1.0f, dt * DEVIATION_RANGE_EASING);
+  float range = deviationRangeShown;
+
+  int y = DEVIATION_AXIS_Y, half = DEVIATION_HALF_WIDTH, zeroX = 64;
+  screen.drawHLine(zeroX - half, y, 2 * half + 1);
+  int doseX = zeroX + (int)lroundf(constrain(deviation / range, -1.0f, 1.0f) * half);
+  screen.drawBox(min(doseX, zeroX), y - DEVIATION_BAR_HEIGHT, abs(doseX - zeroX) + 1, DEVIATION_BAR_HEIGHT);
+
+  // The marks are drawn over the bar: where it covers them they stay readable as dark notches in it
+  screen.setDrawColor(2); // XOR
+  screen.drawVLine(zeroX - half, y - DEVIATION_END_HEIGHT + 1, DEVIATION_END_HEIGHT);
+  screen.drawVLine(zeroX + half, y - DEVIATION_END_HEIGHT + 1, DEVIATION_END_HEIGHT);
+
+  float tickStep = range > DEVIATION_TICKS_MAX * DEVIATION_TICK_FINE ? DEVIATION_TICK_COARSE
+                                                                     : DEVIATION_TICK_FINE;
+  for (int tick = 1; tick * tickStep <= range; tick++)
+  {
+    int dx = (int)lroundf(tick * tickStep / range * half);
+    if (half - dx < DEVIATION_TICK_MIN_GAP)
+    {
+      break; // it would fall on the mark at the end of the scale and rub it out
+    }
+    screen.drawVLine(zeroX - dx, y - DEVIATION_TICK_HEIGHT + 1, DEVIATION_TICK_HEIGHT);
+    screen.drawVLine(zeroX + dx, y - DEVIATION_TICK_HEIGHT + 1, DEVIATION_TICK_HEIGHT);
+  }
+
+  screen.drawVLine(zeroX, y - DEVIATION_ZERO_ABOVE, DEVIATION_ZERO_HEIGHT); // the set weight
+  screen.setDrawColor(1);
+}
 
 // The grind as a curve: how the weight in the cup grew over the whole grind, with the set weight as a
 // dashed line and the moment the grinder was switched off marked in it. The readings are recorded while
@@ -1209,6 +1275,7 @@ void refreshDisplay()
     else if (scaleStatus == STATUS_EMPTY)
     {
       grindProgressShown = 0; // the next grind starts at the beginning again
+      deviationRangeShown = 0;
       resetGrindCurve();
 
       screen.setFontPosTop();
@@ -1239,32 +1306,33 @@ void refreshDisplay()
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED)
     {
+      // What the grind is judged by: the average of the readings since the dose was confirmed, which
+      // gets quieter the longer the cup stands, and how far it ended up from the set weight
+      double dose = noMinusZero(verifiedDose());
+      double deviation = dose - setWeight;
+      double shownDeviation = lround(deviation * 100) == 0 ? 0.0 : deviation; // no "-0.00"
+
       screen.setFontPosTop();
-      screen.setFont(u8g2_font_7x13_tr);
-      screen.setCursor(0, 0);
-      CenterPrintToScreen("Grinding finished", 0);
+      screen.setFont(u8g2_font_logisoso16_tf);
+      snprintf(buf, sizeof(buf), shownDeviation == 0 ? "%.2f g" : "%+.2f g", shownDeviation);
+      CenterPrintToScreen(buf, 1);
 
-      screen.setFontPosCenter();
-      screen.setFont(u8g2_font_7x14B_tf);
-      screen.setCursor(3, 32);
-      snprintf(buf, sizeof(buf), "%3.1fg", noMinusZero(shownWeight - cupWeightEmpty));
-      screen.print(buf);
+      drawDeviationScale(deviation);
 
-      screen.setFontPosCenter();
-      screen.setFont(u8g2_font_unifont_t_symbols);
-      screen.drawGlyph(64, 32, 0x2794);
-
-      screen.setFontPosCenter();
-      screen.setFont(u8g2_font_7x14B_tf);
-      screen.setCursor(84, 32);
-      snprintf(buf, sizeof(buf), "%3.1fg", setWeight);
-      screen.print(buf);
-
+      // The dose in bold with the set weight next to it, the two together centered
+      char setBuf[16];
+      snprintf(buf, sizeof(buf), "%.1fg", dose);
+      snprintf(setBuf, sizeof(setBuf), " / %.1fg", setWeight);
       screen.setFontPosBottom();
+      screen.setFont(u8g2_font_7x14B_tf);
+      int doseWidth = screen.getStrWidth(buf);
       screen.setFont(u8g2_font_7x13_tr);
-      screen.setCursor(64, 64);
-      snprintf(buf, sizeof(buf), "%3.1fs", (double)(finishedGrindingAt - startedGrindingAt) / 1000);
-      CenterPrintToScreen(buf, 64);
+      int setWidth = screen.getStrWidth(setBuf);
+      screen.setFont(u8g2_font_7x14B_tf);
+      screen.setCursor(64 - (doseWidth + setWidth) / 2, 64);
+      screen.print(buf);
+      screen.setFont(u8g2_font_7x13_tr);
+      screen.print(setBuf);
     }
     else if (scaleStatus == STATUS_IN_MENU)
     {

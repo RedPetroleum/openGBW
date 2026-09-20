@@ -23,6 +23,7 @@ public:
 	T taperedAverageOfLast(size_t n, T oldest, T second);
 	T taperedAverageSince(int64_t cutoffMs, T oldest, T second);
 	bool isSteady(size_t n, T tolerance);
+	int64_t timestampOfLast(size_t n);
 
 private:
 	T buffer[S];

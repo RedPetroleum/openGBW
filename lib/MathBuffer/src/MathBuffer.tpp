@@ -212,5 +212,19 @@ bool MathBuffer<T, S>::isSteady(size_t n, T tolerance) {
   return spreadOfLast(n, lowest, highest) && highest - lowest <= tolerance;
 }
 
+// When the oldest of the last n readings was taken, 0 if there are not that many yet. The caller that
+// asked a question about those n readings gets the moment they reach back to out of it
+template<typename T,size_t S>
+int64_t MathBuffer<T, S>::timestampOfLast(size_t n) {
+  if (n == 0 || n > count) {
+    return 0;
+  }
+  int index = (int)headIndex - (int)(n - 1);
+  if (index < 0) { // wrap around
+    index += S;
+  }
+  return bufferTimestamp[index];
+}
+
 // Macro to calculate the absolute value
 #define ABS(a) (((a) > 0) ? (a) : ((a) * -1))

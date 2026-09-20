@@ -50,6 +50,9 @@ bool newDeadTime = false;     // Indicates the running grind still has to calibr
 double flowAtSwitchOff = 0;   // g/s, the mass flow at the moment the grinder was switched off ...
 double doseAtSwitchOff = 0;   // ... and the ground weight without the cup at that moment
 unsigned long verifyingFrom = 0; // from when readings count towards the dose, switch-off plus dead time
+// From when the readings are averaged into the dose the finished screen shows: the oldest reading of
+// the steadiness window that confirmed the dose, 0 while no grind has been confirmed
+unsigned long doseVerifiedFrom = 0;
 const char *grindFailReason = ""; // Why the last grind was aborted, shown on the display
 
 // Tares the scale (sets the current weight to zero). A tare is wanted while lastTareAt is zero, and
@@ -714,16 +717,22 @@ static bool rawSteady(size_t readings, double tolerance, double &lowest, double 
     return rawData.spreadOfLast(readings, lowest, highest) && highest - lowest <= tolerance;
 }
 
-// True where the scale is standing still and, on top of that, at least `readings` of the raw readings
-// it judges that by were taken after `since` - for the dose, where everything from before the dead
-// time says nothing. `since` of 0 asks nothing of the kind. See config.hpp for the two rules
-static bool scaleSteady(unsigned long since) {
+// Which of the two rules found the scale standing still, as the number of raw readings it looked at -
+// 0 if neither did. On top of the rule, at least that many readings have to have been taken after
+// `since` - for the dose, where everything from before the dead time says nothing; `since` of 0 asks
+// nothing of the kind. See config.hpp for the two rules
+static size_t steadyOver(unsigned long since) {
     double lowest = 0, highest = 0;
     size_t usable = since == 0 ? rawData.capacity : rawData.countSamplesSince(since);
-    return (usable >= STEADY_READINGS_SHORT &&
-            rawSteady(STEADY_READINGS_SHORT, STEADY_TOLERANCE_SHORT, lowest, highest)) ||
-           (usable >= STEADY_READINGS_LONG &&
-            rawSteady(STEADY_READINGS_LONG, STEADY_TOLERANCE_LONG, lowest, highest));
+    if (usable >= STEADY_READINGS_SHORT &&
+        rawSteady(STEADY_READINGS_SHORT, STEADY_TOLERANCE_SHORT, lowest, highest)) {
+        return STEADY_READINGS_SHORT;
+    }
+    if (usable >= STEADY_READINGS_LONG &&
+        rawSteady(STEADY_READINGS_LONG, STEADY_TOLERANCE_LONG, lowest, highest)) {
+        return STEADY_READINGS_LONG;
+    }
+    return 0;
 }
 
 // The same two rules with the cup weight on top: the readings stand still and all of them lie around
@@ -751,6 +760,17 @@ static size_t cupDetectedOver(double cupWeight) {
 // Checks if the given cup is resting on the scale, either rule is enough
 bool isCupDetected(double cupWeight) {
     return cupDetectedOver(cupWeight) > 0;
+}
+
+// The dose the finished screen shows: the average of the raw readings since the steadiness window that
+// confirmed it began. Every reading that arrives afterwards goes into it, so the value only gets
+// quieter as long as the cup stands still. Falls back to the displayed weight where no grind has been
+// confirmed
+double verifiedDose() {
+    if (doseVerifiedFrom == 0 || rawData.countSamplesSince(doseVerifiedFrom) == 0) {
+        return shownWeight - cupWeightEmpty;
+    }
+    return rawData.averageSince(doseVerifiedFrom) - cupWeightEmpty;
 }
 
 // Moves the zero point of the load cell by `grams`. This is not a tare of its own: nothing is measured
@@ -806,6 +826,7 @@ void scaleStatusLoop(void *p) {
                     grindFlow = 0;
                     flowAtSwitchOff = 0;
                     doseAtSwitchOff = 0;
+                    doseVerifiedFrom = 0;
                     stopLineFromReading = stopLineAt = switchOffAt = 0;
                     stopLineDose = 0;
                     grinderToggle();
@@ -912,7 +933,8 @@ void scaleStatusLoop(void *p) {
                 // detection uses - and the value they settled on is a plausible dose. Steadiness alone
                 // is not enough: a cup put down again or a hand resting on the scale is just as steady,
                 // and it must not be taken for the dose
-                bool settled = scaleSteady(verifyingFrom);
+                size_t settledOver = steadyOver(verifyingFrom);
+                bool settled = settledOver > 0;
                 bool plausible = ABS(dose - setWeight) <= DOSE_PLAUSIBLE_GRAMS;
                 if (!settled || !plausible) {
                     // Whatever is on the scale after FINISHED_MAX_WAIT is not a dose this grind can
@@ -943,6 +965,9 @@ void scaleStatusLoop(void *p) {
                 grindLogEnd("finished", "dose=%.2f dur=%.2f flow=%.2f dead=%.2f next_dead=%.2f", dose,
                             (finishedGrindingAt - startedGrindingAt) / 1000.0, flowAtSwitchOff,
                             usedDeadTime, deadTimeEnd);
+                // The readings of the accepted window are the first ones that say what the dose is,
+                // the finished screen averages from there on
+                doseVerifiedFrom = (unsigned long)rawData.timestampOfLast(settledOver);
                 scaleStatus = STATUS_GRINDING_FINISHED;
                 break;
             }
