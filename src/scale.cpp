@@ -16,6 +16,7 @@ double scaleFactor = LOADCELL_SCALE_FACTOR; // Load cell calibration factor
 bool scaleMode = false;       // Indicates if the scale is used in timer mode
 bool grindMode = true;        // Grinder mode: impulse (false) or continuous (true, default)
 int grindScreenStyle = GRIND_STYLE_DEFAULT; // How the grinding screen shows the progress
+int bootScreenStyle = BOOT_STYLE_DEFAULT;   // How the initializing screen shows that the scale is getting ready
 bool grinderActive = false;   // Grinder state (on/off)
 unsigned int shotCount;  
 
@@ -986,6 +987,7 @@ void setupScale() {
     scaleMode = preferences.getBool("scaleMode", false);
     grindMode = preferences.getBool("grindMode", true);
     grindScreenStyle = constrain(preferences.getInt("grindStyle", GRIND_STYLE_DEFAULT), 0, GRIND_STYLE_COUNT - 1);
+    bootScreenStyle = constrain(preferences.getInt("bootStyle", BOOT_STYLE_DEFAULT), 0, BOOT_STYLE_COUNT - 1);
     shotCount = preferences.getUInt("shotCount", SHOT_COUNT_DEFAULT);
     sleepTime = constrain(preferences.getInt("sleepTime", SLEEP_AFTER_MS), 5000, 600000);
     if (preferences.getBytesLength("grindHist") == sizeof(grindHistory)) {

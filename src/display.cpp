@@ -76,7 +76,7 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define GRIND_BAR_TICK_HEIGHT 9 // height of the ticks at start, progress and set weight
 #define GRIND_BAR_DONE_HEIGHT 3 // thickness of the line up to the progress tick, the rest is one pixel
 #define GRIND_PROGRESS_HEIGHT 64 // rows of the display, the whole screen is inverted at the set weight
-#define GRIND_FRAME_THICKNESS 2 // thickness of the border that grows around the screen
+#define PROGRESS_FRAME_THICKNESS 2 // thickness of the border that grows around the screen
 #define GRIND_PROGRESS_EASING 8.0f // how fast the drawn progress follows the reading (1/s), the scale only reports twice a second
 
 // A weight that rounds to zero is shown without a sign: a reading a few hundredths below the cup
@@ -142,7 +142,7 @@ MenuItem debugMenuItems[5] = {
 };
 
 int currentStyleMenuItem = 0; // Current selection in the Style submenu
-static const char *styleMenuItems[] = {"Exit", "Grinding Screen"}; // at most three, they are shown at once
+static const char *styleMenuItems[] = {"Exit", "Grinding Screen", "Initializing"}; // at most three, they are shown at once
 static const int styleMenuItemsCount = sizeof(styleMenuItems) / sizeof(styleMenuItems[0]);
 
 // The Style submenu, everything that only changes how a screen looks. The whole list fits under the
@@ -184,8 +184,8 @@ void styleMenuOnClick()
         currentSetting = -1;
         return;
     }
-    currentSetting = GRIND_SCREEN_SETTING;
-    Serial.println("Grinding Screen Menu");
+    currentSetting = currentStyleMenuItem == 1 ? GRIND_SCREEN_SETTING : BOOT_SCREEN_SETTING;
+    Serial.println(currentStyleMenuItem == 1 ? "Grinding Screen Menu" : "Initializing Screen Menu");
 }
 
 static const char *grindStyleNames[GRIND_STYLE_COUNT] = {"Bar", "Invert", "Frame", "Curve (default)"};
@@ -205,6 +205,31 @@ void showGrindScreenMenu()
   LeftPrintToScreen(grindStyleNames[prev], 19);
   LeftPrintActiveToScreen(grindStyleNames[grindScreenStyle], 35);
   LeftPrintToScreen(grindStyleNames[next], 51);
+  screen.sendBuffer();
+}
+
+static const char *bootStyleNames[BOOT_STYLE_COUNT] = {"Bar", "Frame (default)"};
+
+// How the initializing screen shows that the scale is getting ready, turning switches, clicking saves
+void showBootScreenMenu()
+{
+  screen.clearBuffer();
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_7x14B_tf);
+  CenterPrintToScreen("Initializing", 0);
+  screen.setFont(u8g2_font_7x13_tr);
+  for (int i = 0; i < BOOT_STYLE_COUNT; i++)
+  {
+    u8g2_uint_t y = 19 + i * 16;
+    if (i == bootScreenStyle)
+    {
+      LeftPrintActiveToScreen(bootStyleNames[i], y);
+    }
+    else
+    {
+      LeftPrintToScreen(bootStyleNames[i], y);
+    }
+  }
   screen.sendBuffer();
 }
 
@@ -669,6 +694,10 @@ void showSetting()
   {
     showGrindScreenMenu();
   }
+  else if (currentSetting == BOOT_SCREEN_SETTING)
+  {
+    showBootScreenMenu();
+  }
 
 }
 
@@ -776,6 +805,8 @@ static void bootDrawRing(float radius, float height, float turn)
 
 // Draws one frame of the boot screen: an espresso cup as a turning wireframe model above a bar
 // that fills while the scale tares
+static void drawProgressFrame(float shown, bool complete); // drawn with the progress screens below
+
 static void drawBootScreen()
 {
   if (bootStartedAt == 0)
@@ -813,9 +844,14 @@ static void drawBootScreen()
     previousY = y;
   }
 
-  // The bar fills evenly over the time the scale needs to get ready, the fill keeps one pixel of air
-  // to the frame
+  // Both styles fill evenly over the time the scale needs to get ready
   float progress = min(1.0f, elapsed / (float)BOOT_READY_MS);
+  if (bootScreenStyle == BOOT_STYLE_FRAME)
+  {
+    drawProgressFrame(progress, true); // the border closes when the scale is ready
+    return;
+  }
+  // The bar keeps one pixel of air to its frame
   screen.drawFrame(0, BOOT_BAR_Y, 128, BOOT_BAR_HEIGHT);
   int fill = toPixel(progress * (128 - 4));
   if (fill > 0)
@@ -846,10 +882,11 @@ static void drawGrindBar(float shown, bool complete)
 
 // The progress as a border growing around the screen: four arms start in the middle of the top and the
 // bottom edge, run outwards to the corners and from there along the sides back towards the middle, so
-// at the set weight the border is closed. Drawn like the inversion, a lit pixel under an arm goes dark.
-static void drawGrindFrame(float shown, bool complete)
+// when it is done the border is closed. Drawn like the inversion, a lit pixel under an arm goes dark.
+// Used by the grinding screen and by the initializing screen.
+static void drawProgressFrame(float shown, bool complete)
 {
-  int t = GRIND_FRAME_THICKNESS;
+  int t = PROGRESS_FRAME_THICKNESS;
   int armLength = 64 + (32 - t); // half an edge outwards, then along the side to the middle
   int drawn = (int)ceilf(shown * armLength);
   drawn = constrain(drawn, 0, complete ? armLength : armLength - 1);
@@ -906,7 +943,7 @@ static void showGrindProgress(float progress, bool complete)
     invertGrindScreen(grindProgressShown, complete);
     break;
   case GRIND_STYLE_FRAME:
-    drawGrindFrame(grindProgressShown, complete);
+    drawProgressFrame(grindProgressShown, complete);
     break;
   default:
     drawGrindBar(grindProgressShown, complete);

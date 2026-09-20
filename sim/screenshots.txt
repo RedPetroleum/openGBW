@@ -3,7 +3,9 @@
 
 [boot]
 boot 700; shot boot
-boot 1500; shot boot-turned # the cup turns while the bar fills
+boot 1500; shot boot-turned # the cup turns while the border grows
+boot 2900; shot boot-ready # shortly before the border is closed
+set bootScreenStyle 0; boot 1500; shot boot-bar # the other style of the Style menu
 
 [main screen]
 shot main

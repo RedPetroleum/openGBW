@@ -245,6 +245,8 @@ void rotary_onButtonClick()
                 preferences.putBool("grindMode", true);
                 grindScreenStyle = GRIND_STYLE_DEFAULT;
                 preferences.putInt("grindStyle", GRIND_STYLE_DEFAULT);
+                bootScreenStyle = BOOT_STYLE_DEFAULT;
+                preferences.putInt("bootStyle", BOOT_STYLE_DEFAULT);
                 shotCount = SHOT_COUNT_DEFAULT;
                 preferences.putUInt("shotCount", shotCount);
                 loadcell.set_scale(scaleFactor);
@@ -327,6 +329,14 @@ void rotary_onButtonClick()
             currentSetting = STYLE_MENU_SETTING; // Back to the Style Menu
             break;
         }
+        case BOOT_SCREEN_SETTING: // Initializing screen style
+        {
+            preferences.begin("scale", false);
+            preferences.putInt("bootStyle", bootScreenStyle);
+            preferences.end();
+            currentSetting = STYLE_MENU_SETTING; // Back to the Style Menu
+            break;
+        }
         case WEIGHT_DATA_SETTING: // Weight Data view
         case GRIND_HISTORY_SETTING: // Weight History view
         {
@@ -404,6 +414,12 @@ void rotary_loop()
             { // Grinding screen style, turning steps through the styles
                 grindScreenStyle = (grindScreenStyle + (newValue - encoderValue) * -encoderDir) % GRIND_STYLE_COUNT;
                 grindScreenStyle = grindScreenStyle < 0 ? GRIND_STYLE_COUNT + grindScreenStyle : grindScreenStyle;
+                encoderValue = newValue;
+            }
+            else if (currentSetting == BOOT_SCREEN_SETTING)
+            { // Initializing screen style, turning steps through the styles
+                bootScreenStyle = (bootScreenStyle + (newValue - encoderValue) * -encoderDir) % BOOT_STYLE_COUNT;
+                bootScreenStyle = bootScreenStyle < 0 ? BOOT_STYLE_COUNT + bootScreenStyle : bootScreenStyle;
                 encoderValue = newValue;
             }
             else if (currentSetting == GRIND_HISTORY_SETTING)
