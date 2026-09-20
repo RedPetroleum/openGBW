@@ -15,6 +15,7 @@ double grindFlow = 0;         // g/s, the mass flow of the running grind, see st
 double scaleFactor = LOADCELL_SCALE_FACTOR; // Load cell calibration factor
 bool scaleMode = false;       // Indicates if the scale is used in timer mode
 bool grindMode = true;        // Grinder mode: impulse (false) or continuous (true, default)
+bool grindScreenInvert = false; // Grinding screen: progress bar (false, default) or inverted screen (true)
 bool grinderActive = false;   // Grinder state (on/off)
 unsigned int shotCount;  
 
@@ -984,6 +985,7 @@ void setupScale() {
     setCupWeight2 = preferences.getDouble("cup2", (double)CUP_WEIGHT_2);
     scaleMode = preferences.getBool("scaleMode", false);
     grindMode = preferences.getBool("grindMode", true);
+    grindScreenInvert = preferences.getBool("grindInvert", false);
     shotCount = preferences.getUInt("shotCount", SHOT_COUNT_DEFAULT);
     sleepTime = constrain(preferences.getInt("sleepTime", SLEEP_AFTER_MS), 5000, 600000);
     if (preferences.getBytesLength("grindHist") == sizeof(grindHistory)) {

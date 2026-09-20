@@ -68,7 +68,12 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define BOOT_BAR_Y 54
 #define BOOT_BAR_HEIGHT 9
 
-// Progress of the grinding screen: the screen is inverted from the bottom up, towards the set weight
+// Progress of the grinding screen towards the set weight, shown in the style chosen in the Style menu:
+// as a bar, a scale with ticks at both ends and at the progress, or by inverting the whole screen
+#define GRIND_BAR_Y 39
+#define GRIND_BAR_HEIGHT 12
+#define GRIND_BAR_TICK_HEIGHT 9 // height of the ticks at start, progress and set weight
+#define GRIND_BAR_DONE_HEIGHT 3 // thickness of the line up to the progress tick, the rest is one pixel
 #define GRIND_PROGRESS_HEIGHT 64 // rows of the display, the whole screen is inverted at the set weight
 #define GRIND_PROGRESS_EASING 8.0f // how fast the drawn progress follows the reading (1/s), the scale only reports twice a second
 
@@ -99,10 +104,10 @@ void WeightPrintToScreen(double weight, u8g2_uint_t y)
 // Menu items for user interface
 int currentMenuItem = 0;      // Index of the current menu item
 int currentSetting;           // Index of the current setting being adjusted
-int menuItemsCount = debugMode ? 12 : 11;      // Total number of menu items
+int menuItemsCount = debugMode ? 13 : 12;      // Total number of menu items
 
  // Menu items for settings and calibration
-MenuItem menuItems[12] = {
+MenuItem menuItems[13] = {
     {0, false, "Exit", 0},
     {1, false, "Cup Weight 1", 1, &setCupWeight},
     {2, false, "Cup Weight 2", 1, &setCupWeight2},
@@ -112,10 +117,11 @@ MenuItem menuItems[12] = {
     {6, false, "Grinding Mode", 0},
     {7, false, "Info Menu", 0},
     {8, false, "Sleep Timer", 0},
-    {9, false, "Reset", 0},
-    {10, false, "Games", 0},
+    {9, false, "Style", 0},
+    {10, false, "Reset", 0},
+    {11, false, "Games", 0},
     // Debug menu placeholder (conditional)
-    {11, false, "Debug Menu", 0} // Visible only if debugMode is true
+    {12, false, "Debug Menu", 0} // Visible only if debugMode is true
 };
 
 int debugMenuItemsCount = 5; // Number of items in the Debug Menu
@@ -132,6 +138,74 @@ MenuItem debugMenuItems[5] = {
     {3, false, "Weight History", 0},
     {4, false, "Zero Shot Count", 0}
 };
+
+int currentStyleMenuItem = 0; // Current selection in the Style submenu
+static const char *styleMenuItems[] = {"Exit", "Grinding Screen"}; // at most three, they are shown at once
+static const int styleMenuItemsCount = sizeof(styleMenuItems) / sizeof(styleMenuItems[0]);
+
+// The Style submenu, everything that only changes how a screen looks. The whole list fits under the
+// title, so it is shown at once with the selection highlighted instead of scrolling like the menus above
+void showStyleMenu()
+{
+    screen.clearBuffer();
+    screen.setFontPosTop();
+    screen.setFont(u8g2_font_7x14B_tf);
+    CenterPrintToScreen("Style", 0);
+
+    screen.setFont(u8g2_font_7x13_tr);
+    for (int i = 0; i < styleMenuItemsCount; i++)
+    {
+        u8g2_uint_t y = 19 + i * 16;
+        if (i == currentStyleMenuItem)
+        {
+            LeftPrintActiveToScreen(styleMenuItems[i], y);
+        }
+        else
+        {
+            LeftPrintToScreen(styleMenuItems[i], y);
+        }
+    }
+
+    screen.sendBuffer();
+}
+
+void styleMenuOnTurn(int steps)
+{
+    currentStyleMenuItem = ((currentStyleMenuItem + steps) % styleMenuItemsCount + styleMenuItemsCount) % styleMenuItemsCount;
+}
+
+void styleMenuOnClick()
+{
+    if (currentStyleMenuItem == 0) // Exit
+    {
+        scaleStatus = STATUS_IN_MENU;
+        currentSetting = -1;
+        return;
+    }
+    currentSetting = GRIND_SCREEN_SETTING;
+    Serial.println("Grinding Screen Menu");
+}
+
+// How the grinding screen shows the progress, turning switches between the two, clicking saves
+void showGrindScreenMenu()
+{
+  screen.clearBuffer();
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_7x14B_tf);
+  CenterPrintToScreen("Grinding Screen", 0);
+  screen.setFont(u8g2_font_7x13_tr);
+  if (grindScreenInvert)
+  {
+    LeftPrintToScreen("Bar (default)", 19);
+    LeftPrintActiveToScreen("Invert", 35);
+  }
+  else
+  {
+    LeftPrintActiveToScreen("Bar (default)", 19);
+    LeftPrintToScreen("Invert", 35);
+  }
+  screen.sendBuffer();
+}
 
 void showDebugMenu()
 {
@@ -164,9 +238,9 @@ void showDebugMenu()
 
 void setupMenuItems() {
     if (debugMode) {
-        menuItemsCount = 12; // Include Debug Menu
+        menuItemsCount = 13; // Include Debug Menu
     } else {
-        menuItemsCount = 11; // Exclude Debug Menu
+        menuItemsCount = 12; // Exclude Debug Menu
     }
 }
 
@@ -586,6 +660,14 @@ void showSetting()
   {
     showGamesMenu();
   }
+  else if (currentSetting == STYLE_MENU_SETTING)
+  {
+    showStyleMenu();
+  }
+  else if (currentSetting == GRIND_SCREEN_SETTING)
+  {
+    showGrindScreenMenu();
+  }
 
 }
 
@@ -744,26 +826,56 @@ static void drawBootScreen()
 static float grindProgressShown = 0;  // Progress as drawn, follows the reading smoothly
 static unsigned long grindProgressDrawnAt = 0; // Time of the last progress update
 
-// Shows how much of the set weight is in the cup by inverting the screen from the bottom up. The
-// reading only arrives twice a second, so the inverted part grows smoothly instead of jumping. While
-// grinding it stays one row short of the top: the grinder stops before the set weight. Once the
-// grinder is off and only the reading still has to settle, it runs up to the top. Has to be called
-// last, it inverts everything that has been drawn before.
-static void invertGrindProgress(float progress, bool complete)
+// The progress as a bar: a scale from the empty cup to the set weight, the ground part drawn as a
+// thicker line than the part that is still missing
+static void drawGrindBar(float shown, bool complete)
 {
-  unsigned long now = millis();
-  float dt = min((now - grindProgressDrawnAt) / 1000.0f, 0.1f);
-  grindProgressDrawnAt = now;
-  grindProgressShown += ((complete ? 1.0f : progress) - grindProgressShown) * min(1.0f, dt * GRIND_PROGRESS_EASING);
+  int centerY = GRIND_BAR_Y + GRIND_BAR_HEIGHT / 2;
+  int tickY = centerY - GRIND_BAR_TICK_HEIGHT / 2;
+  int span = 127; // the ticks of start and set weight sit on the first and the last column
+  int progressX = (int)ceilf(shown * span);
+  progressX = constrain(progressX, 0, complete ? span : span - 1);
 
-  // The easing only approaches the target, so the last rows are rounded up to reach the top
-  int rows = (int)ceilf(grindProgressShown * GRIND_PROGRESS_HEIGHT);
+  screen.drawHLine(0, centerY, 128); // the whole scale, the ground part is drawn over it thicker
+  screen.drawBox(0, centerY - GRIND_BAR_DONE_HEIGHT / 2, progressX + 1, GRIND_BAR_DONE_HEIGHT);
+  screen.drawVLine(0, tickY, GRIND_BAR_TICK_HEIGHT);
+  screen.drawVLine(progressX, tickY, GRIND_BAR_TICK_HEIGHT);
+  screen.drawVLine(127, tickY, GRIND_BAR_TICK_HEIGHT);
+}
+
+// The progress by inverting the screen from the bottom up
+static void invertGrindScreen(float shown, bool complete)
+{
+  int rows = (int)ceilf(shown * GRIND_PROGRESS_HEIGHT);
   rows = constrain(rows, 0, complete ? GRIND_PROGRESS_HEIGHT : GRIND_PROGRESS_HEIGHT - 1);
   if (rows > 0)
   {
     screen.setDrawColor(2); // XOR: lit pixels go dark and the background lights up
     screen.drawBox(0, GRIND_PROGRESS_HEIGHT - rows, 128, rows);
     screen.setDrawColor(1);
+  }
+}
+
+// Shows how much of the set weight is in the cup, in the style chosen in the Style menu. The reading
+// only arrives twice a second, so the progress grows smoothly instead of jumping. While grinding it
+// stays one pixel short of the end: the grinder stops before the set weight. Once the grinder is off
+// and only the reading still has to settle, it runs all the way. Has to be called last, inverting
+// takes everything that has been drawn before with it.
+static void showGrindProgress(float progress, bool complete)
+{
+  unsigned long now = millis();
+  float dt = min((now - grindProgressDrawnAt) / 1000.0f, 0.1f);
+  grindProgressDrawnAt = now;
+  grindProgressShown += ((complete ? 1.0f : progress) - grindProgressShown) * min(1.0f, dt * GRIND_PROGRESS_EASING);
+
+  // The easing only approaches the target, so the last pixels are rounded up to reach the end
+  if (grindScreenInvert)
+  {
+    invertGrindScreen(grindProgressShown, complete);
+  }
+  else
+  {
+    drawGrindBar(grindProgressShown, complete);
   }
 }
 
@@ -832,11 +944,11 @@ void refreshDisplay()
       snprintf(buf, sizeof(buf), "%3.1fs", grindSeconds);
       CenterPrintToScreen(buf, 64);
 
-      invertGrindProgress(setWeight > 0 ? (shownWeight - cupWeightEmpty) / setWeight : 0, verifying);
+      showGrindProgress(setWeight > 0 ? (shownWeight - cupWeightEmpty) / setWeight : 0, verifying);
     }
     else if (scaleStatus == STATUS_EMPTY)
     {
-      grindProgressShown = 0; // the next grind starts with an uninverted screen
+      grindProgressShown = 0; // the next grind starts at the beginning again
 
       screen.setFontPosTop();
       screen.setFont(u8g2_font_7x13_tr);

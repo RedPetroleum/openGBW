@@ -18,3 +18,6 @@ bool displayAsleep();
 void showDebugModeStatus(bool debugMode);
 void showDebugMenu();
 void handleDebugMenuAction();
+void showStyleMenu();            // Draws the Style submenu
+void styleMenuOnTurn(int steps); // Moves the selection in the Style submenu
+void styleMenuOnClick();         // Opens the selected style setting or returns to the main menu

@@ -62,7 +62,7 @@ void rotary_onButtonClick()
 
         // Use the display method from display.cpp
         showDebugModeStatus(debugMode);
-        menuItemsCount = debugMode ? 12 : 11;
+        menuItemsCount = debugMode ? 13 : 12;
         clickCount = 0; // Reset the click count
         return;         // Exit early to prevent other actions
     }
@@ -133,17 +133,23 @@ void rotary_onButtonClick()
             currentSetting = 8;
             Serial.println("Sleep Timer Menu");
             break;
-        case 9: // Reset Menu
+        case 9: // Style Menu
+            currentSetting = STYLE_MENU_SETTING;
+            scaleStatus = STATUS_IN_SUBMENU;
+            currentStyleMenuItem = 0; // Start on "Exit"
+            Serial.println("Style Menu");
+            break;
+        case 10: // Reset Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 6;
             Serial.println("Reset Menu");
             break;
-        case 10: // Games Menu
+        case 11: // Games Menu
             currentSetting = GAMES_MENU_SETTING;
             scaleStatus = STATUS_IN_SUBMENU;
             Serial.println("Games Menu");
             break;
-        case 11: // Debug Menu
+        case 12: // Debug Menu
             if (debugMode)
             {
                 scaleStatus = STATUS_IN_SUBMENU;
@@ -237,6 +243,8 @@ void rotary_onButtonClick()
                 preferences.putBool("scaleMode", false);
                 grindMode = true;
                 preferences.putBool("grindMode", true);
+                grindScreenInvert = false;
+                preferences.putBool("grindInvert", false);
                 shotCount = SHOT_COUNT_DEFAULT;
                 preferences.putUInt("shotCount", shotCount);
                 loadcell.set_scale(scaleFactor);
@@ -306,6 +314,19 @@ void rotary_onButtonClick()
             gamesMenuOnClick(); // Starts the selected game or returns to the main menu
             break;
         }
+        case STYLE_MENU_SETTING: // Style Menu
+        {
+            styleMenuOnClick(); // Opens the selected style setting or returns to the main menu
+            break;
+        }
+        case GRIND_SCREEN_SETTING: // Grinding screen style
+        {
+            preferences.begin("scale", false);
+            preferences.putBool("grindInvert", grindScreenInvert);
+            preferences.end();
+            currentSetting = STYLE_MENU_SETTING; // Back to the Style Menu
+            break;
+        }
         case WEIGHT_DATA_SETTING: // Weight Data view
         case GRIND_HISTORY_SETTING: // Weight History view
         {
@@ -372,6 +393,16 @@ void rotary_loop()
             else if (currentSetting == GAMES_MENU_SETTING)
             { // Games Menu
                 gamesMenuOnTurn((newValue - encoderValue) * -encoderDir);
+                encoderValue = newValue;
+            }
+            else if (currentSetting == STYLE_MENU_SETTING)
+            { // Style Menu
+                styleMenuOnTurn((newValue - encoderValue) * -encoderDir);
+                encoderValue = newValue;
+            }
+            else if (currentSetting == GRIND_SCREEN_SETTING)
+            { // Grinding screen style, turning switches between the two
+                grindScreenInvert = !grindScreenInvert;
                 encoderValue = newValue;
             }
             else if (currentSetting == GRIND_HISTORY_SETTING)

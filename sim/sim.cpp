@@ -228,11 +228,13 @@ static bool setVariable(const std::string &name, const std::string &text, int li
   else if (name == "scaleReady")
     scaleReady = value != 0;
   else if (name == "debugMode")
-    debugMode = value != 0, menuItemsCount = debugMode ? 12 : 11;
+    debugMode = value != 0, menuItemsCount = debugMode ? 13 : 12;
   else if (name == "scaleMode")
     scaleMode = value != 0;
   else if (name == "grindMode")
     grindMode = value != 0;
+  else if (name == "grindScreenInvert")
+    grindScreenInvert = value != 0;
   else if (name == "scaleStatus")
     scaleStatus = value;
   else if (name == "currentSetting")
