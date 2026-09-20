@@ -69,6 +69,10 @@ set scaleStatus 6; set grindTime 12.5 # switched off, the rest falls out of the 
 weight 94.7; wait 360; weight 94.7; wait 360; weight 94.5; wait 360; weight 94.7; wait 360
 weight 94.7; wait 360; weight 94.7; wait 360; weight 94.8; wait 360; weight 94.8; wait 360
 draw; shot grinding-curve
+# ... and the same grind on the finished screen, which draws it from the same recording
+set scaleStatus 2; set confirmedDose 18.24; set flowAtSwitchOff 2.05
+turn 3; draw; shot grinding-finished-curve # the fourth page: the weight over the grind
+turn 1; draw; shot grinding-finished-flow  # the fifth: the flow that makes
 [menu]
 click; shot menu
 turn 1; click; shot cup-weight-1

@@ -106,7 +106,7 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define DEVIATION_SIGN_GAP 3      // pixels between the sign and the first digit
 
 // Second page of the finished screen: what the grind itself was, as four rows of label and value
-#define FINISHED_PAGES 3          // deviation, details and delay, the knob pages between them
+#define FINISHED_PAGES 5          // deviation, details, delay, the curve and the flow
 #define FINISHED_DETAIL_ROWS 4
 #define FINISHED_DETAIL_TOP 3     // first row of the topmost line ...
 #define FINISHED_DETAIL_STEP 15   // ... and the distance to the next one
@@ -1209,7 +1209,7 @@ static void resetGrindCurve()
 
 // Records the current weight. A grind that is longer than the buffer keeps every second reading and
 // records half as often from then on, so however long it takes the whole grind stays in the curve.
-static void recordGrindCurve(unsigned long elapsed, float weight)
+static void recordGrindReading(unsigned long elapsed, float weight)
 {
   while (elapsed / curveSampleMs >= CURVE_SAMPLES)
   {
@@ -1228,19 +1228,163 @@ static void recordGrindCurve(unsigned long elapsed, float weight)
   curveCount = index + 1;
 }
 
+// Takes the current weight into the curve of the running grind, whatever style the screen is drawn in:
+// the finished screen draws the grind from the same recording. The curve keeps growing while verifying,
+// what falls after the switch-off belongs to the grind as well
+static void recordGrindCurve(bool verifying)
+{
+  unsigned long elapsed = startedGrindingAt > 0 ? millis() - startedGrindingAt : 0;
+  // The filtered weight, not the shown one: the steps of the display would turn up in the flow as
+  // spikes, and the recording is data, not what the screen made of it
+  recordGrindReading(elapsed, scaleWeight - cupWeightEmpty);
+  if (verifying && curveOffMs < 0)
+  {
+    curveOffMs = startedGrindingAt > 0 ? finishedGrindingAt - startedGrindingAt : elapsed;
+  }
+}
+
+// The two drawings of the grind on the finished screen: how the weight grew over the whole grind, and
+// the flow that comes out of it. Both are the recording of the curve over the whole screen, the numbers
+// of the grind stand on the pages before them
+#define FINISHED_CURVE_TOP 2       // rows the drawings are stretched over ...
+#define FINISHED_CURVE_BOTTOM 60
+#define FINISHED_CURVE_BASE 62     // ... and the dotted ground under them
+#define FINISHED_FLOW_WINDOW 5     // recorded readings to each side the flow is taken over
+#define FINISHED_FLOW_MIN 1.0f     // g/s, the smallest top of the flow scale
+
+// Where a moment of the recording sits on the width: the whole grind spans the screen
+static int grindCurveX(long ms)
+{
+  long span = max((long)(curveCount - 1) * curveSampleMs, 1L);
+  return (int)constrain(ms * 127 / span, 0L, 127L);
+}
+
+// The flow at a recorded reading, taken over FINISHED_FLOW_WINDOW readings to each side: a single
+// reading is a hundredth of a gram apart from the next and would only give noise
+static float grindFlowAt(int index)
+{
+  int first = max(0, index - FINISHED_FLOW_WINDOW);
+  int last = min(curveCount - 1, index + FINISHED_FLOW_WINDOW);
+  if (last <= first)
+  {
+    return 0;
+  }
+  return (curveWeights[last] - curveWeights[first]) / 100.0f / ((last - first) * curveSampleMs / 1000.0f);
+}
+
+// The ground both drawings stand on and the moment the grinder was switched off
+static void drawGrindGround()
+{
+  for (int x = 0; x < 128; x += 2)
+  {
+    screen.drawPixel(x, FINISHED_CURVE_BASE);
+  }
+  if (curveOffMs >= 0)
+  {
+    int offX = grindCurveX(curveOffMs);
+    for (int y = FINISHED_CURVE_TOP; y <= FINISHED_CURVE_BOTTOM; y += 3)
+    {
+      screen.drawPixel(offX, y);
+    }
+  }
+}
+
+// Draws one value per recorded reading, solid up to the switch-off and dotted after it: what came
+// after belongs to the grind, but not to the running grinder
+static void drawGrindLine(float (*valueAt)(int), float top)
+{
+  int previousX = 0, previousY = 0;
+  for (int i = 0; i < curveCount; i++)
+  {
+    int x = grindCurveX((long)i * curveSampleMs);
+    int y = constrain(FINISHED_CURVE_BOTTOM - (int)(valueAt(i) / top * (FINISHED_CURVE_BOTTOM - FINISHED_CURVE_TOP)),
+                      FINISHED_CURVE_TOP, FINISHED_CURVE_BOTTOM);
+    if (i == 0)
+    {
+      previousX = x;
+      previousY = y;
+      continue;
+    }
+    if (curveOffMs >= 0 && (long)i * curveSampleMs > curveOffMs)
+    {
+      if (x % 2 == 0)
+      {
+        screen.drawPixel(x, y);
+      }
+    }
+    else
+    {
+      screen.drawLine(previousX, previousY, x, y);
+    }
+    previousX = x;
+    previousY = y;
+  }
+}
+
+static float grindWeightAt(int index)
+{
+  return curveWeights[index] / 100.0f;
+}
+
+// Fourth page of the finished screen: the whole grind as the curve of the weight, with the set weight
+// as a dashed line - the same drawing as the grinding screen in its curve style, without its numbers
+static void drawGrindCurvePage()
+{
+  if (curveCount < 2)
+  {
+    screen.setFontPosCenter();
+    screen.setFont(u8g2_font_7x13_tr);
+    CenterPrintToScreen("No curve", 32);
+    return;
+  }
+  float top = max((float)setWeight, 1.0f);
+  for (int i = 0; i < curveCount; i++)
+  {
+    top = max(top, grindWeightAt(i));
+  }
+  int targetY = constrain(FINISHED_CURVE_BOTTOM - (int)(setWeight / top * (FINISHED_CURVE_BOTTOM - FINISHED_CURVE_TOP)),
+                          FINISHED_CURVE_TOP, FINISHED_CURVE_BOTTOM);
+  for (int x = 0; x < 128; x += 4)
+  {
+    screen.drawPixel(x, targetY);
+    screen.drawPixel(x + 1, targetY);
+  }
+  drawGrindLine(grindWeightAt, top);
+  drawGrindGround();
+}
+
+// Fifth page: the flow over the same grind, the slope of the curve of the page before
+static void drawGrindFlowPage()
+{
+  if (curveCount < 2)
+  {
+    screen.setFontPosCenter();
+    screen.setFont(u8g2_font_7x13_tr);
+    CenterPrintToScreen("No curve", 32);
+    return;
+  }
+  float top = FINISHED_FLOW_MIN;
+  for (int i = 0; i < curveCount; i++)
+  {
+    top = max(top, grindFlowAt(i));
+  }
+  drawGrindLine(grindFlowAt, top);
+  drawGrindGround();
+  // The top of the scale, the one number the drawing cannot be read without
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_5x7_tf);
+  char buf[12];
+  snprintf(buf, sizeof(buf), "%.1fg/s", top);
+  screen.drawStr(0, 0, buf);
+}
+
 // The whole grinding screen in the curve style, drawn instead of the weights and the progress
 static void showGrindCurve(bool verifying)
 {
   char buf[16];
   double weight = shownWeight - cupWeightEmpty;
-  // The curve keeps growing while verifying: what falls after the switch-off belongs to the grind
   unsigned long elapsed = startedGrindingAt > 0 ? millis() - startedGrindingAt : 0;
   unsigned long grindMs = verifying && startedGrindingAt > 0 ? finishedGrindingAt - startedGrindingAt : elapsed;
-  recordGrindCurve(elapsed, weight);
-  if (verifying && curveOffMs < 0)
-  {
-    curveOffMs = grindMs; // the grinder went off when the screen started verifying
-  }
 
   // The set weight sits below the top edge, the overshoot has to fit in as well
   float top = max((float)(setWeight * CURVE_HEADROOM), 1.0f); // setWeight is a double, max() needs one type
@@ -1362,6 +1506,7 @@ void refreshDisplay()
     {
       // The grinder has already stopped while verifying, only the reading still has to settle
       bool verifying = scaleStatus == STATUS_GRINDING_VERIFYING;
+      recordGrindCurve(verifying); // in every style: the finished screen draws the grind from it
 
       if (grindScreenStyle == GRIND_STYLE_CURVE)
       {
@@ -1440,6 +1585,14 @@ void refreshDisplay()
     else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 2)
     {
       drawDelayDetails();
+    }
+    else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 3)
+    {
+      drawGrindCurvePage();
+    }
+    else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 4)
+    {
+      drawGrindFlowPage();
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED)
     {
