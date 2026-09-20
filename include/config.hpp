@@ -82,7 +82,10 @@ extern bool debugMode;
 // FILTER picks which one the scale runs
 // Filter v03: the value of v01, but the display is only allowed to step by one when the scale is not
 // lying flat - and where it is, v02 has to land on that same step first. Whether it lies flat is what
-// the three detectors below decide. All of it was developed and tried out in tools/plotgrind.py
+// the three detectors below decide. The same holds while a tolerance test runs on the readings, flat or
+// not: the cup detection on the empty scale and the dose verification after the grind both decide
+// whether the readings lie within a tolerance of each other, and the display is held just as tightly
+// there. All of it was developed and tried out in tools/plotgrind.py
 #define FILTER_OLD 0
 #define FILTER_V01 1
 #define FILTER_V02 2

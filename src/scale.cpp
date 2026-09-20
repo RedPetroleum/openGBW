@@ -377,11 +377,25 @@ static double holdNegative(double shown) {
     return released ? shown : 0.0;
 }
 
+// Whether a tolerance test is running on the readings right now: the cup detection on the empty scale,
+// and the dose verification from the moment the readings count towards the dose. Both of them ask
+// whether the readings lie within a tolerance of each other, and the display must not wander off by a
+// step while that is being decided - so it is held as tightly there as on a weight lying flat
+static bool testingTolerance() {
+    if (scaleStatus == STATUS_EMPTY) {
+        return true; // the cup detection checks every reading against its two rules
+    }
+    if (scaleStatus == STATUS_GRINDING_VERIFYING) {
+        return millis() >= verifyingFrom; // before that the last grounds are still landing
+    }
+    return false;
+}
+
 // The display of v03: it steps like the ordinary hysteresis while the weight moves, but where the
-// detectors say it lies flat, a single step also needs v02 to land on that same step. And a shown value
-// within ZERO_V03_GRAMS of zero for ZERO_V03_READINGS readings in a row is shown as a plain zero, and
-// a small negative value is held at zero by holdNegative() - the display only, the weight behind it is
-// untouched and nothing is tared
+// detectors say it lies flat - or where a tolerance test is running, see testingTolerance() - a single
+// step also needs v02 to land on that same step. And a shown value within ZERO_V03_GRAMS of zero for
+// ZERO_V03_READINGS readings in a row is shown as a plain zero, and a small negative value is held at
+// zero by holdNegative() - the display only, the weight behind it is untouched and nothing is tared
 static void updateShownV03(double value, double other, double softFlat, bool flat) {
     static int units = 0, pending = 0, direction = 0, zeros = 0;
     static bool started = false;
@@ -394,6 +408,7 @@ static void updateShownV03(double value, double other, double softFlat, bool fla
     bool strict = softFlat >= HYSTERESIS_FLAT_FROM;
     double extra = strict ? HYSTERESIS_GRAMS_FLAT : HYSTERESIS_GRAMS;
     int confirm = strict ? HYSTERESIS_READINGS_FLAT : HYSTERESIS_READINGS;
+    bool held = flat || testingTolerance(); // the two cases in which v02 has to agree to a single step
 
     int delta = wanted - units;
     if (delta >= 2 || delta <= -2) {
@@ -409,14 +424,14 @@ static void updateShownV03(double value, double other, double softFlat, bool fla
         pending++;
         double boundary = (units + delta * 0.5) * DISPLAY_STEP + delta * extra;
         if (pending >= confirm || (value - boundary) * delta >= 0) {
-            if (!flat) {
+            if (!held) {
                 units += delta; // the weight is moving, the display has to follow
                 pending = direction = 0;
             } else if ((int)lround(other / DISPLAY_STEP) == units + delta) {
-                units += delta; // lying flat and v02 agrees: the step is real
+                units += delta; // held back and v02 agrees: the step is real
                 pending = direction = 0;
             }
-            // Lying flat and v02 still on the old step: no step, and `pending` is kept so it is made
+            // Held back and v02 still on the old step: no step, and `pending` is kept so it is made
             // the moment v02 comes along
         }
     }
@@ -705,10 +720,29 @@ static bool cupResting(double cupWeight, size_t readings, double tolerance) {
            ABS(lowest - cupWeight) < CUP_DETECTION_TOLERANCE && ABS(highest - cupWeight) < CUP_DETECTION_TOLERANCE;
 }
 
+// Which of the two rules recognised the given cup, as the number of readings it looked at - 0 if
+// neither did. The caller needs that number for the micro-tare: it is exactly those readings that say
+// what the cup weighs, and only they are known to lie within a tolerance of each other
+static size_t cupDetectedOver(double cupWeight) {
+    if (cupResting(cupWeight, STEADY_READINGS_SHORT, STEADY_TOLERANCE_SHORT)) {
+        return STEADY_READINGS_SHORT;
+    }
+    if (cupResting(cupWeight, STEADY_READINGS_LONG, STEADY_TOLERANCE_LONG)) {
+        return STEADY_READINGS_LONG;
+    }
+    return 0;
+}
+
 // Checks if the given cup is resting on the scale, either rule is enough
 bool isCupDetected(double cupWeight) {
-    return cupResting(cupWeight, STEADY_READINGS_SHORT, STEADY_TOLERANCE_SHORT) ||
-           cupResting(cupWeight, STEADY_READINGS_LONG, STEADY_TOLERANCE_LONG);
+    return cupDetectedOver(cupWeight) > 0;
+}
+
+// Moves the zero point of the load cell by `grams`. This is not a tare of its own: nothing is measured
+// here, the correction comes from readings that have already been taken, and it is a twentieth of a
+// gram at most
+static void microTare(double grams) {
+    loadcell.set_offset(loadcell.get_offset() + lround(grams * (double)loadcell.get_scale()));
 }
 
 // Task to manage the status of the scale
@@ -728,13 +762,22 @@ void scaleStatusLoop(void *p) {
                     ABS(scaleWeight - tenSecAvg) < TARE_STEADY_TOLERANCE) {
                     lastTareAt = 0; // Retare if conditions are met
                 }
-                if (isCupDetected(setCupWeight) || isCupDetected(setCupWeight2)) {
-                    // Only the readings the shortest of the detection rules looks at: whichever rule
-                    // recognised the cup, these last ones lie within its tolerance, while a longer
-                    // window could still reach back into the cup being put down
-                    cupWeightEmpty = weightData.averageOfLast(STEADY_READINGS_SHORT);
+                size_t cupOver = cupDetectedOver(setCupWeight);
+                if (cupOver == 0) {
+                    cupOver = cupDetectedOver(setCupWeight2);
+                }
+                if (cupOver > 0) {
+                    // Micro-tare. The readings that recognised the cup say what it really weighs, and
+                    // their average almost never sits on a whole DISPLAY_STEP - 76.34 g, say. The
+                    // hysteresis has snapped the shown weight onto 76.3 g anyway, so the zero point is
+                    // moved by those 0.04 g and the step becomes the truth instead of a rounding of it.
+                    // Everything from here on counts from a cup that weighs exactly what is displayed
+                    double resting = rawData.averageOfLast(cupOver);
+                    cupWeightEmpty = lround(resting / DISPLAY_STEP) * DISPLAY_STEP;
+                    microTare(resting - cupWeightEmpty);
                     scaleStatus = STATUS_GRINDING_IN_PROGRESS;
                     grindLogBegin(); // from here on every reading of the load cell is logged
+                    grindLogMark("microtare cup=%.2f was=%.3f", cupWeightEmpty, resting);
                     if (!scaleMode) {
                         newDeadTime = true;
                         startedGrindingAt = millis();
