@@ -1042,8 +1042,8 @@ static float deviationRangeShown = 0; // half of the drawn scale in grams, follo
 static unsigned long deviationDrawnAt = 0; // Time of the last update of the scale
 
 // One tick of the scale, drawn solid and inverted where the bar covers it, so it stays visible in it.
-// Only the rows of the bar are inverted: the line under them keeps every pixel, and so does a tick
-// that stands beside the bar
+// Under the bar the notch runs all the way down through the line, which there is the lower edge of the
+// bar; a tick that stands beside the bar keeps every pixel, and so do the line and the marks there
 static void drawDeviationTick(int x, int axisY, int barLeft, int barRight)
 {
   screen.drawVLine(x, axisY - DEVIATION_TICK_HEIGHT + 1, DEVIATION_TICK_HEIGHT);
@@ -1053,7 +1053,7 @@ static void drawDeviationTick(int x, int axisY, int barLeft, int barRight)
   }
   int top = max(axisY - DEVIATION_TICK_HEIGHT + 1, axisY - DEVIATION_BAR_HEIGHT);
   screen.setDrawColor(0);
-  screen.drawVLine(x, top, axisY - top); // down to the row above the line
+  screen.drawVLine(x, top, axisY - top + 1); // through the line under the bar
   screen.setDrawColor(1);
 }
 
