@@ -414,6 +414,24 @@ static void setShownV03(double grams) {
     shownWeight = shownUnits * DISPLAY_STEP;
 }
 
+// Puts the running filter and the display straight onto a weight that is known from somewhere else,
+// rounded to the step of the display. Used when the dose has been verified: the readings the dose was
+// taken from are already in, and the filter should show that value instead of finding its way onto it
+// over the next seconds
+static void setWeightV03(double grams) {
+    double rounded = lround(grams / DISPLAY_STEP) * DISPLAY_STEP;
+    v01Count = 0; // the window of the line starts over at this value ...
+    v01Fitted = rounded;
+    v01Slope = 0;
+    v01Ready = true;
+    for (int i = 0; i < FILTER_V01_SEED_READINGS; i++) {
+        kalmanV01.updateEstimate(rounded); // ... and the estimate behind it is pulled onto it
+    }
+    previousScaleWeight = scaleWeight;
+    scaleWeight = rounded;
+    setShownV03(rounded);
+}
+
 // The display of v03: it steps like the ordinary hysteresis while the weight moves, but where the
 // detectors say it lies flat - or where a tolerance test is running, see testingTolerance() - a single
 // step also needs v02 to land on that same step. And a shown value within ZERO_V03_GRAMS of zero for
@@ -626,10 +644,13 @@ void addGrindRecord(uint32_t shot, float duration, float grinderDelay, float flo
 // ---------------------------------------------------------------------------------------------------
 // The mass flow the grind is stopped by, see config.hpp
 
-// Straight line through the readings of the last FLOW_WINDOW seconds, never reaching back further than
-// the first grounds can have arrived - before that the cup was only resting, and those readings would
-// pull the line flat. Writes its slope in grams per second and its value at `now`, the weight the line
-// says is on the scale at this moment; false while the window holds too few readings for a line
+// Straight line through the raw readings of the last FLOW_WINDOW seconds, never reaching back further
+// than the first grounds can have arrived - before that the cup was only resting, and those readings
+// would pull the line flat. It runs on the raw readings and not on the filtered weights: the filter
+// lays its own line through its window and lags behind a rising weight, and that lag would go straight
+// into the flow and into the delay measured from it. Writes the slope in grams per second and the value
+// at `now`, the weight the line says is on the scale at this moment; false while the window holds too
+// few readings for a line
 static bool windowLine(unsigned long now, double *slope, double *fitted) {
     int64_t from = (int64_t)now - (int64_t)(FLOW_WINDOW * 1000);
     int64_t firstGrounds = (int64_t)startedGrindingAt + (int64_t)(FLOW_START_DELAY * 1000);
@@ -639,7 +660,7 @@ static bool windowLine(unsigned long now, double *slope, double *fitted) {
     int count = 0;
     double sumTime = 0, sumValue = 0, sumSquares = 0, sumMixed = 0;
     // Seconds counted backwards from now, so the sums stay small numbers however long the board has run
-    weightData.executeOnSamplesSince(from, [&](double value, int64_t at) {
+    rawData.executeOnSamplesSince(from, [&](double value, int64_t at) {
         double t = (at - (int64_t)now) / 1000.0;
         count++;
         sumTime += t;
@@ -665,7 +686,7 @@ static bool windowLine(unsigned long now, double *slope, double *fitted) {
 static void grindState(unsigned long now, double *dose, double *flow) {
     double slope = 0, fitted = 0;
     bool line = windowLine(now, &slope, &fitted);
-    *dose = (line ? fitted : scaleWeight) - cupWeightEmpty;
+    *dose = (line ? fitted : rawData.averageOfLast(1)) - cupWeightEmpty;
 
     double running = (now - startedGrindingAt) / 1000.0;
     if (running >= FLOW_EARLY_UNTIL) {
@@ -920,9 +941,6 @@ void scaleStatusLoop(void *p) {
                 // The grinder is off, the last grounds are still landing. Keep the display awake until
                 // the dose is confirmed, otherwise the sleep timer would leave this state
                 lastActivityAt = millis();
-                // Window of 1s so it always contains readings (an empty window would average to 0)
-                double currentWeight = weightData.taperedAverageSince((int64_t)millis() - 1000,
-                                                                      VERIFY_WEIGHT_OLDEST, VERIFY_WEIGHT_SECOND);
                 if (scaleWeight < 5) {
                     startedGrindingAt = 0;
                     scaleStatus = STATUS_EMPTY; // the cup was taken before the dose could be confirmed
@@ -935,14 +953,20 @@ void scaleStatusLoop(void *p) {
                 if (millis() < verifyingFrom) {
                     break;
                 }
-                double dose = currentWeight - cupWeightEmpty;
                 // The dose is reached once the raw readings stand still by the same two rules the cup
                 // detection uses - and the value they settled on is a plausible dose. Steadiness alone
                 // is not enough: a cup put down again or a hand resting on the scale is just as steady,
                 // and it must not be taken for the dose
                 size_t settledOver = steadyOver(verifyingFrom);
                 bool settled = settledOver > 0;
-                bool plausible = ABS(dose - setWeight) <= DOSE_PLAUSIBLE_GRAMS;
+                // What those readings say is the dose: the average over exactly the window that passed,
+                // on the raw readings and with its oldest two counted less (see config.hpp). The rule
+                // only accepts a window whose readings were all taken after the delay had run out, so
+                // nothing from the time the last grounds were still landing is in it
+                double dose = settled ? rawData.taperedAverageOfLast(settledOver, VERIFY_WEIGHT_OLDEST,
+                                                                     VERIFY_WEIGHT_SECOND) - cupWeightEmpty
+                                      : 0;
+                bool plausible = settled && ABS(dose - setWeight) <= DOSE_PLAUSIBLE_GRAMS;
                 if (!settled || !plausible) {
                     // Whatever is on the scale after FINISHED_MAX_WAIT is not a dose this grind can
                     // answer for, so it is not counted and the delay is not calibrated from it
@@ -952,6 +976,7 @@ void scaleStatusLoop(void *p) {
                     break;
                 }
                 confirmedDose = dose; // what the dose is, from here on nothing changes it any more
+                setWeightV03(cupWeightEmpty + dose); // the filter and the display show it at once
                 double usedDelay = delayEnd;
                 delayUsed = usedDelay; // the grind ran with this one, the new one follows below
                 if (newDelay) {

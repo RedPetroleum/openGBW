@@ -116,6 +116,8 @@ extern bool debugMode;
 #define FILTER_V01_JUMP 1.0       // g, a difference this large is a step: taken over, window emptied
 #define FILTER_V01_KALMAN_ERROR 0.02 // measurement and estimate error of the Kalman filter behind it
 #define FILTER_V01_KALMAN_NOISE 0.02 // ... and its process noise; only the ratio of the two does anything
+#define FILTER_V01_SEED_READINGS 10 // times a known weight is pushed through that Kalman filter when the
+                                    // filter is set onto it, until its estimate sits on the value
 #define FILTER_V01_FLAT_SLOPE 2.5 // g/s, from here on the line does not count as horizontal at all
 #define FILTER_V02_WINDOW 5       // readings of the moving average, the same number the old filter bundles
 
@@ -200,7 +202,9 @@ extern bool debugMode;
 // the cup detection, the dose after grinding. That window reaches back to the edge of the settled
 // stretch, and its oldest readings still carry a little of what happened before it: the cup coming to
 // rest, the last grounds landing. They are therefore counted with less weight, the oldest one least, so
-// the weight of a reading fades in linearly over the first two instead of starting at full strength
+// the weight of a reading fades in linearly over the first two instead of starting at full strength.
+// For the dose the rule on top of that is that every reading of the window was taken after the delay
+// had run out, so the window can never reach back into the time the last grounds were still landing
 #define VERIFY_WEIGHT_OLDEST 0.33 // a third for the oldest reading of the window ...
 #define VERIFY_WEIGHT_SECOND 0.67 // ... two thirds for the one after it, all the others count fully
 
@@ -224,10 +228,13 @@ extern bool debugMode;
 // one is a fixed assumption, the back one is what decides the dose and is therefore calibrated after
 // every grind.
 //
-// A straight line is fitted to the readings of the last FLOW_WINDOW seconds, and both numbers the
+// A straight line is fitted to the raw readings of the last FLOW_WINDOW seconds, and both numbers the
 // decision needs are read off it: x is its value at this moment and the flow m is its slope. Taking x
 // off the line rather than from the reading is what keeps a vibration spike from stopping the grinder
 // early - a spike moves a line through dozens of readings by a fraction of what it moves the reading.
+// The line runs on the raw readings, not on the filtered weight: the filter lays a line of its own and
+// lags behind a rising weight, and that lag would go into x, into m and into the delay measured from
+// them. The same holds for the dose: it is read off the raw readings once they stand still.
 // For the first FLOW_EARLY_UNTIL seconds the line is still too short for a slope worth trusting, so
 // the flow is the ground weight divided by the running time less the delay at the front,
 // m = x / (t - FLOW_START_DELAY); x comes off the line from the start.
