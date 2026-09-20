@@ -243,8 +243,8 @@ void rotary_onButtonClick()
                 preferences.putBool("scaleMode", false);
                 grindMode = true;
                 preferences.putBool("grindMode", true);
-                grindScreenStyle = GRIND_STYLE_BAR;
-                preferences.putInt("grindStyle", GRIND_STYLE_BAR);
+                grindScreenStyle = GRIND_STYLE_DEFAULT;
+                preferences.putInt("grindStyle", GRIND_STYLE_DEFAULT);
                 shotCount = SHOT_COUNT_DEFAULT;
                 preferences.putUInt("shotCount", shotCount);
                 loadcell.set_scale(scaleFactor);

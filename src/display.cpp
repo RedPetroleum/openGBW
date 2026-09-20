@@ -188,7 +188,7 @@ void styleMenuOnClick()
     Serial.println("Grinding Screen Menu");
 }
 
-static const char *grindStyleNames[GRIND_STYLE_COUNT] = {"Bar (default)", "Invert", "Frame", "Curve"};
+static const char *grindStyleNames[GRIND_STYLE_COUNT] = {"Bar", "Invert", "Frame", "Curve (default)"};
 
 // How the grinding screen shows the progress, turning steps through the styles, clicking saves. There
 // are more styles than fit under the title, so the list scrolls around the selection like the menus above
@@ -922,10 +922,11 @@ static void showGrindProgress(float progress, bool complete)
 #define CURVE_SAMPLES 256    // recorded readings, a grind longer than that halves its resolution
 #define CURVE_SAMPLE_MS 100  // time between two recorded readings at the start
 #define CURVE_MIN_SPAN_MS 5000 // time the width covers at least, so a short grind is not blown up
-#define CURVE_TOP 10         // rows the curve is drawn in ...
+#define CURVE_HEADER_BOTTOM 13 // last row of the current weight in the header
+#define CURVE_TOP 15         // rows the curve is drawn in, one pixel below the header ...
 #define CURVE_BOTTOM 52
 #define CURVE_BASELINE 54    // ... and the dotted line under it
-#define CURVE_HEADROOM 1.15f // how much of the height above the set weight stays free for the overshoot
+#define CURVE_HEADROOM 1.0f  // the set weight is the top of the scale, an overshoot pushes it down a little
 
 static int16_t curveWeights[CURVE_SAMPLES]; // recorded weights in hundredths of a gram
 static int curveSampleMs = CURVE_SAMPLE_MS; // time one recorded reading stands for at the moment
@@ -989,11 +990,14 @@ static void showGrindCurve(bool verifying)
 
   screen.clearBuffer();
   screen.setFontPosTop();
-  screen.setFont(u8g2_font_5x7_tf);
+  screen.setFont(u8g2_font_7x14B_tf); // the weight in the cup is the number to read from across the room
   snprintf(buf, sizeof(buf), "%.1fg", noMinusZero(weight));
   LeftPrintToScreen(buf, 0);
+  screen.setFont(u8g2_font_5x7_tf);
+  screen.setFontPosBottom();
   snprintf(buf, sizeof(buf), "%.1fg", setWeight);
-  RightPrintToScreen(buf, 0);
+  RightPrintToScreen(buf, CURVE_HEADER_BOTTOM + 1); // the set weight stands next to it, on its baseline
+  screen.setFontPosTop();
 
   // The set weight as a dashed line
   int targetY = curveY(setWeight);
@@ -1044,13 +1048,13 @@ static void showGrindCurve(bool verifying)
   }
 
   // The numbers of the grind: how long it took, how fast it ran and how far it is from the set weight
-  screen.setCursor(0, 57);
+  screen.setCursor(0, 56);
   snprintf(buf, sizeof(buf), "%.1fs", grindMs / 1000.0); // the grinding time, it stands still while verifying
   screen.print(buf);
-  screen.setCursor(42, 57);
-  snprintf(buf, sizeof(buf), "%.1fg/s", grindMs > 500 ? weight / (grindMs / 1000.0) : 0.0);
+  screen.setCursor(42, 56);
+  snprintf(buf, sizeof(buf), "%.2fg/s", grindMs > 500 ? weight / (grindMs / 1000.0) : 0.0);
   screen.print(buf);
-  screen.setCursor(95, 57);
+  screen.setCursor(95, 56);
   snprintf(buf, sizeof(buf), "%+.1fg", noMinusZero(weight - setWeight));
   screen.print(buf);
 }
