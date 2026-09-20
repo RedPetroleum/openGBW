@@ -75,16 +75,18 @@ turn 3; draw; shot grinding-finished-curve # the fourth page: the weight over th
 turn 1; draw; shot grinding-finished-flow  # the fifth: the flow that makes
 [menu]
 click; shot menu
+turn 1; click; shot calibrate-menu # the settings of a scale and a grinder live in here
 turn 1; click; shot cup-weight-1
 turn 1; turn 2; click; weight 3.2; wait 200; shot scale-factor
-click; turn 1; click; shot delay
-click; turn 1; click; shot scale-mode
+click; turn 1; click; shot delay # saving returns to the Calibrate menu, leave it over its own Exit
+click; turn 1; click # Delay -> Exit of the Calibrate menu -> back in the main menu
+turn 1; click; shot scale-mode
 click; turn 1; click; shot grinding-mode
 click; turn 1; click; shot info
 click; turn 1; click; shot sleep-timer
 click; turn 1; click; shot style-menu
 turn 1; click; shot grinding-screen # the style of the grinding screen: bar, inverted or frame
-click; turn 1; click # saving returns to the Style menu, leave it over its own Exit
+click; turn -1; click # saving returns to the Style menu, leave it over its own Exit
 turn 1; click; shot reset
 click; turn 1; click; shot games-menu
 click; turn 1; click; shot debug-menu

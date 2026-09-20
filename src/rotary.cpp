@@ -91,65 +91,49 @@ void rotary_onButtonClick()
             rotaryEncoder.setAcceleration(100);
             Serial.println("Exited Menu");
             break;
-        case 1: // Cup Weight 1 Menu
+        case 1: // Calibrate Menu
+            currentSetting = CALIBRATE_MENU_SETTING;
             scaleStatus = STATUS_IN_SUBMENU;
-            currentSetting = 0;
-            Serial.println("Cup 1 Menu");
+            currentCalibrateMenuItem = 0; // Start on "Exit"
+            Serial.println("Calibrate Menu");
             break;
-        case 2: // Cup Weight 2 Menu
-            scaleStatus = STATUS_IN_SUBMENU;
-            currentSetting = 11;
-            Serial.println("Cup 2 Menu");
-            break;
-        case 3: // Scale Factor Menu
-            scaleStatus = STATUS_IN_SUBMENU;
-            currentSetting = 10;
-            encoderValue = rotaryEncoder.readEncoder();
-            rotaryEncoder.setAcceleration(100); // Faster adjustment when turning quickly
-            Serial.println("Scale Factor Menu");
-            break;
-        case 4: // Delay Menu
-            scaleStatus = STATUS_IN_SUBMENU;
-            currentSetting = 2;
-            Serial.println("Delay Menu");
-            break;
-        case 5: // Scale Mode Menu
+        case 2: // Scale Mode Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 3;
             Serial.println("Scale Mode Menu");
             break;
-        case 6: // Grinding Mode Menu
+        case 3: // Grinding Mode Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 4;
             Serial.println("Grind Mode Menu");
             break;
-        case 7: // Info Menu
+        case 4: // Info Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 5;
             Serial.println("Info Menu");
             break;
-        case 8: // Sleep Timer Menu
+        case 5: // Sleep Timer Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 8;
             Serial.println("Sleep Timer Menu");
             break;
-        case 9: // Style Menu
+        case 6: // Style Menu
             currentSetting = STYLE_MENU_SETTING;
             scaleStatus = STATUS_IN_SUBMENU;
             currentStyleMenuItem = 0; // Start on "Exit"
             Serial.println("Style Menu");
             break;
-        case 10: // Reset Menu
+        case 7: // Reset Menu
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 6;
             Serial.println("Reset Menu");
             break;
-        case 11: // Games Menu
+        case 8: // Games Menu
             currentSetting = GAMES_MENU_SETTING;
             scaleStatus = STATUS_IN_SUBMENU;
             Serial.println("Games Menu");
             break;
-        case 12: // Debug Menu
+        case 9: // Debug Menu
             if (debugMode)
             {
                 scaleStatus = STATUS_IN_SUBMENU;
@@ -183,12 +167,12 @@ void rotary_onButtonClick()
                 showCupWeightSetScreen(cupWeight); // Show confirmation
                 displayLock = false;
 
-                exitToMenu();
+                currentSetting = CALIBRATE_MENU_SETTING; // back to the menu it was opened from
             }
             else
             {
                 Serial.println("Failsafe: Exiting cup weight menu due to zero weight");
-                exitToMenu();
+                currentSetting = CALIBRATE_MENU_SETTING;
             }
             break;
         }
@@ -197,8 +181,7 @@ void rotary_onButtonClick()
             preferences.begin("scale", false);
             preferences.putDouble("deadtime", delayEnd);
             preferences.end();
-            scaleStatus = STATUS_IN_MENU;
-            currentSetting = -1;
+            currentSetting = CALIBRATE_MENU_SETTING; // back to the menu it was opened from
             break;
         }
         case 3: // Scale Mode Menu
@@ -307,8 +290,7 @@ void rotary_onButtonClick()
             preferences.putDouble("calibration", scaleFactor);
             preferences.end();
             rotaryEncoder.setAcceleration(0);
-            scaleStatus = STATUS_IN_MENU;
-            currentSetting = -1;
+            currentSetting = CALIBRATE_MENU_SETTING; // back to the menu it was opened from
             break;
         }
         case GAMES_MENU_SETTING: // Games Menu
@@ -319,6 +301,16 @@ void rotary_onButtonClick()
         case STYLE_MENU_SETTING: // Style Menu
         {
             styleMenuOnClick(); // Opens the selected style setting or returns to the main menu
+            break;
+        }
+        case CALIBRATE_MENU_SETTING: // Calibrate Menu
+        {
+            calibrateMenuOnClick(); // Opens the selected setting or returns to the main menu
+            if (currentSetting == 10)
+            { // The scale factor follows the knob faster the quicker it is turned
+                encoderValue = rotaryEncoder.readEncoder();
+                rotaryEncoder.setAcceleration(100);
+            }
             break;
         }
         case GRIND_SCREEN_SETTING: // Grinding screen style
@@ -406,7 +398,12 @@ void rotary_loop()
             if (currentSetting == 0 || currentSetting == 11)
             { // Cup weight menus: turning leaves without saving
                 encoderValue = newValue;
-                exitToMenu();
+                currentSetting = CALIBRATE_MENU_SETTING; // back to the menu it was opened from
+            }
+            else if (currentSetting == CALIBRATE_MENU_SETTING)
+            { // Calibrate Menu
+                calibrateMenuOnTurn((newValue - encoderValue) * -encoderDir);
+                encoderValue = newValue;
             }
             else if (currentSetting == GAMES_MENU_SETTING)
             { // Games Menu

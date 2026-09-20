@@ -138,24 +138,21 @@ void WeightPrintToScreen(double weight, u8g2_uint_t y)
 // Menu items for user interface
 int currentMenuItem = 0;      // Index of the current menu item
 int currentSetting;           // Index of the current setting being adjusted
-int menuItemsCount = debugMode ? 13 : 12;      // Total number of menu items
+int menuItemsCount = debugMode ? 10 : 9;      // Total number of menu items
 
- // Menu items for settings and calibration
-MenuItem menuItems[13] = {
+ // Menu items; what is set once for a scale and a grinder sits in the Calibrate submenu
+MenuItem menuItems[10] = {
     {0, false, "Exit", 0},
-    {1, false, "Cup Weight 1", 1, &setCupWeight},
-    {2, false, "Cup Weight 2", 1, &setCupWeight2},
-    {3, false, "Scale Factor", 1, &scaleFactor},
-    {4, false, "Delay", 0.01, &delayEnd},
-    {5, false, "Scale Mode", 0},
-    {6, false, "Grinding Mode", 0},
-    {7, false, "Info Menu", 0},
-    {8, false, "Sleep Timer", 0},
-    {9, false, "Style", 0},
-    {10, false, "Reset", 0},
-    {11, false, "Games", 0},
+    {1, false, "Calibrate", 0},
+    {2, false, "Scale Mode", 0},
+    {3, false, "Grinding Mode", 0},
+    {4, false, "Info Menu", 0},
+    {5, false, "Sleep Timer", 0},
+    {6, false, "Style", 0},
+    {7, false, "Reset", 0},
+    {8, false, "Games", 0},
     // Debug menu placeholder (conditional)
-    {12, false, "Debug Menu", 0} // Visible only if debugMode is true
+    {9, false, "Debug Menu", 0} // Visible only if debugMode is true
 };
 
 int debugMenuItemsCount = 5; // Number of items in the Debug Menu
@@ -173,9 +170,52 @@ MenuItem debugMenuItems[5] = {
     {4, false, "Zero Shot Count", 0}
 };
 
+int currentCalibrateMenuItem = 0; // Current selection in the Calibrate submenu
+static const char *calibrateMenuItems[] = {"Exit", "Cup Weight 1", "Cup Weight 2", "Scale Factor", "Delay"};
+static const int calibrateMenuItemsCount = sizeof(calibrateMenuItems) / sizeof(calibrateMenuItems[0]);
+static const int calibrateMenuSettings[] = {-1, 0, 11, 10, 2}; // what each of them opens
+
 int currentStyleMenuItem = 0; // Current selection in the Style submenu
 static const char *styleMenuItems[] = {"Exit", "Grinding Screen", "Initializing"}; // at most three, they are shown at once
 static const int styleMenuItemsCount = sizeof(styleMenuItems) / sizeof(styleMenuItems[0]);
+
+// The Calibrate submenu: everything that is set once for a scale and a grinder and then left alone.
+// It holds more items than fit under a title at once, so it scrolls like the main menu, one line above
+// and one below the selection
+void showCalibrateMenu()
+{
+    int previous = (currentCalibrateMenuItem + calibrateMenuItemsCount - 1) % calibrateMenuItemsCount;
+    int next = (currentCalibrateMenuItem + 1) % calibrateMenuItemsCount;
+
+    screen.clearBuffer();
+    screen.setFontPosTop();
+    screen.setFont(u8g2_font_7x14B_tf);
+    CenterPrintToScreen("Calibrate", 0);
+    screen.setFont(u8g2_font_7x13_tr);
+    LeftPrintToScreen(calibrateMenuItems[previous], 19);
+    LeftPrintActiveToScreen(calibrateMenuItems[currentCalibrateMenuItem], 35);
+    LeftPrintToScreen(calibrateMenuItems[next], 51);
+    screen.sendBuffer();
+}
+
+void calibrateMenuOnTurn(int steps)
+{
+    currentCalibrateMenuItem = ((currentCalibrateMenuItem + steps) % calibrateMenuItemsCount
+                                + calibrateMenuItemsCount) % calibrateMenuItemsCount;
+}
+
+void calibrateMenuOnClick()
+{
+    if (currentCalibrateMenuItem == 0) // Exit
+    {
+        scaleStatus = STATUS_IN_MENU;
+        currentSetting = -1;
+        return;
+    }
+    currentSetting = calibrateMenuSettings[currentCalibrateMenuItem];
+    Serial.print("Calibrate: ");
+    Serial.println(calibrateMenuItems[currentCalibrateMenuItem]);
+}
 
 // The Style submenu, everything that only changes how a screen looks. The whole list fits under the
 // title, so it is shown at once with the selection highlighted instead of scrolling like the menus above
@@ -296,9 +336,9 @@ void showDebugMenu()
 
 void setupMenuItems() {
     if (debugMode) {
-        menuItemsCount = 13; // Include Debug Menu
+        menuItemsCount = 10; // Include Debug Menu
     } else {
-        menuItemsCount = 12; // Exclude Debug Menu
+        menuItemsCount = 9; // Exclude Debug Menu
     }
 }
 
@@ -721,6 +761,10 @@ void showSetting()
   else if (currentSetting == STYLE_MENU_SETTING)
   {
     showStyleMenu();
+  }
+  else if (currentSetting == CALIBRATE_MENU_SETTING)
+  {
+    showCalibrateMenu();
   }
   else if (currentSetting == GRIND_SCREEN_SETTING)
   {

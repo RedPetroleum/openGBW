@@ -45,6 +45,7 @@ struct GrindRecord
 #define STYLE_MENU_SETTING 15 // currentSetting while the Style submenu is shown
 #define GRIND_SCREEN_SETTING 16 // currentSetting while the grinding screen style is chosen
 #define BOOT_SCREEN_SETTING 17 // currentSetting while the initializing screen style is chosen
+#define CALIBRATE_MENU_SETTING 18 // currentSetting while the Calibrate submenu is shown
 
 // How the grinding screen shows the progress, chosen in the Style menu
 #define GRIND_STYLE_BAR 0    // a bar below the weights
@@ -346,6 +347,7 @@ extern unsigned int shotCount;
 extern int debugMenuItemsCount;
 extern int currentDebugMenuItem;
 extern int currentStyleMenuItem; // Current selection in the Style submenu
+extern int currentCalibrateMenuItem; // Current selection in the Calibrate submenu
 extern MathBuffer<double, WEIGHT_DATA_SIZE> weightData;
 extern MathBuffer<double, WEIGHT_DATA_SIZE> rawData; // the same readings unfiltered
 extern GrindRecord grindHistory[GRIND_HISTORY_SIZE];

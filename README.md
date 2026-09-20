@@ -64,10 +64,10 @@ The game **Doom** is based on [daveruiz/doom-nano](https://github.com/daveruiz/d
 1) 3D print the included models for a Eureka Mignon MCI or Mignon XL or design your own
 2) flash the firmware onto an ESP32
 3) connect the display, load cell and rotary encoder to the ESP32 and connect the grinder (on the Mignon MCI see [Hardware](#hardware-on-the-mignon-mci), other grinders may need a relay). The pins are defined in `include/config.hpp`
-4) go into the menu by pressing the button of the rotary encoder and look at "Delay", the time your grinder keeps delivering after it is switched off. 0.30s is a good enough starting value, the scale calibrates it from there
+4) go into the menu by pressing the button of the rotary encoder and look at "Calibrate" > "Delay", the time your grinder keeps delivering after it is switched off. 0.30s is a good enough starting value, the scale calibrates it from there
 5) set the grinding mode: on the Mignon MCI use continuous (the default) and set the grinder to manual mode (see [Hardware](#hardware-on-the-mignon-mci)). Use impulse if your grinder needs a short pulse to start and another one to stop.
-6) calibrate your load cell: open "Scale Factor", place a known weight on the scale and turn the knob until the live weight matches, then press to save
-7) set your dosing cup weights: open "Cup Weight 1", place the empty cup on the scale and press. Repeat with "Cup Weight 2" if you use a second cup or portafilter.
+6) calibrate your load cell: open "Calibrate" > "Scale Factor", place a known weight on the scale and turn the knob until the live weight matches, then press to save
+7) set your dosing cup weights: open "Calibrate" > "Cup Weight 1", place the empty cup on the scale and press. Repeat with "Cup Weight 2" if you use a second cup or portafilter.
 8) set your desired weight and place one of your empty dosing cups on the scale. The grinding will start and stop automatically. The first grind might be off by a bit. The accuracy will increase with each grind as the scale calibrates the delay of the grinder
 
 -----------
@@ -87,15 +87,22 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 | Item | Function |
 |---|---|
 | Exit | back to the main screen |
-| Cup Weight 1 / Cup Weight 2 | place the empty cup and press to save its weight, turn to leave without saving |
-| Scale Factor | turn to change the calibration factor while watching the live weight, press to save |
-| Delay | how long the grinder keeps delivering after it was switched off, between 0 and 2s. The grinder stops as soon as the weight still to come carries the dose over the target, so this is what decides the dose. After every grind 40% of the deviation is corrected automatically, so it settles on the right value within a few grinds |
+| Calibrate | everything that is set once for a scale and a grinder, see below |
 | Scale Mode | GBW (default) or scale only (no grinder control, timer starts when the weight increases) |
 | Grinding Mode | continuous (relay stays closed while grinding) or impulse (short pulse to start and stop) |
 | Info Menu | cup weights, delay, scale factor and shot count |
 | Sleep Timer | time without activity until the display turns off (default 60 seconds). Tapping the scale, turning or pressing the knob wakes it without changing anything |
 | Reset | restore all settings to their defaults |
 | Games | see below |
+
+#### Calibrate
+
+| Menu | What it does |
+|---|---|
+| Exit | back to the menu |
+| Cup Weight 1 / Cup Weight 2 | place the empty cup and press to save its weight, turn to leave without saving |
+| Scale Factor | turn to change the calibration factor while watching the live weight, press to save |
+| Delay | how long the grinder keeps delivering after it was switched off, between 0 and 2s. The grinder stops as soon as the weight still to come carries the dose over the target, so this is what decides the dose. After every grind 40% of the deviation is corrected automatically, so it settles on the right value within a few grinds |
 | Debug Menu | only visible in debug mode, toggled by pressing the knob four times quickly |
 
 #### Debug Menu
