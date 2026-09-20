@@ -1041,6 +1041,22 @@ void finishedScreenOnTurn(int steps)
 static float deviationRangeShown = 0; // half of the drawn scale in grams, follows the deviation smoothly
 static unsigned long deviationDrawnAt = 0; // Time of the last update of the scale
 
+// One tick of the scale, drawn solid and inverted where the bar covers it, so it stays visible in it.
+// Only the rows of the bar are inverted: the line under them keeps every pixel, and so does a tick
+// that stands beside the bar
+static void drawDeviationTick(int x, int axisY, int barLeft, int barRight)
+{
+  screen.drawVLine(x, axisY - DEVIATION_TICK_HEIGHT + 1, DEVIATION_TICK_HEIGHT);
+  if (x < barLeft || x > barRight)
+  {
+    return;
+  }
+  int top = max(axisY - DEVIATION_TICK_HEIGHT + 1, axisY - DEVIATION_BAR_HEIGHT);
+  screen.setDrawColor(0);
+  screen.drawVLine(x, top, axisY - top); // down to the row above the line
+  screen.setDrawColor(1);
+}
+
 // The deviation of the dose from the set weight: the set weight is the mark in the middle, the bar
 // runs from there to where the dose ended up. The scale grows with the deviation, see the
 // DEVIATION_ defines above
@@ -1072,8 +1088,8 @@ static void drawDeviationScale(double deviation)
   for (int tick = 1; tick * tickStep <= range; tick++)
   {
     int dx = (int)lroundf(tick * tickStep / range * half);
-    screen.drawVLine(zeroX - dx, y - DEVIATION_TICK_HEIGHT + 1, DEVIATION_TICK_HEIGHT);
-    screen.drawVLine(zeroX + dx, y - DEVIATION_TICK_HEIGHT + 1, DEVIATION_TICK_HEIGHT);
+    drawDeviationTick(zeroX - dx, y, min(doseX, zeroX), max(doseX, zeroX));
+    drawDeviationTick(zeroX + dx, y, min(doseX, zeroX), max(doseX, zeroX));
   }
 
   screen.drawVLine(zeroX, y - DEVIATION_ZERO_ABOVE, DEVIATION_ZERO_HEIGHT); // the set weight
