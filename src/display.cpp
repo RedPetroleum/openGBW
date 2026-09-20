@@ -1142,19 +1142,20 @@ static void drawGrindDetails()
 // value the two make together (see DEAD_TIME_CORRECTION in config.hpp)
 static void drawDeadTimeDetails()
 {
-  const char *labels[FINISHED_DETAIL_ROWS] = {"Dead time", "Used", "Measured", "Next"};
+  // The heading carries the unit, the three values are whole milliseconds
+  const char *labels[FINISHED_DETAIL_ROWS] = {"Dead time / ms", "Used", "Measured", "Next"};
   char values[FINISHED_DETAIL_ROWS][16];
   values[0][0] = 0; // the first row is the heading of the page
-  snprintf(values[1], sizeof(values[1]), "%.2f s", deadTimeUsed);
+  snprintf(values[1], sizeof(values[1]), "%.0f", deadTimeUsed * 1000);
   if (deadTimeMeasured > 0)
   {
-    snprintf(values[2], sizeof(values[2]), "%.2f s", deadTimeMeasured);
+    snprintf(values[2], sizeof(values[2]), "%.0f", deadTimeMeasured * 1000);
   }
   else
   {
     strcpy(values[2], "-"); // too little flow at the switch-off to measure it
   }
-  snprintf(values[3], sizeof(values[3]), "%.2f s", deadTimeEnd);
+  snprintf(values[3], sizeof(values[3]), "%.0f", deadTimeEnd * 1000);
 
   screen.setFontPosTop();
   screen.setFont(u8g2_font_7x13_tr);
