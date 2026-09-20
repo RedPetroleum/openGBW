@@ -391,19 +391,32 @@ static bool testingTolerance() {
     return false;
 }
 
+static int shownUnits = 0, shownPending = 0, shownDirection = 0, shownZeros = 0;
+static bool shownStarted = false;
+
+// Puts the display on the given weight, which has to be a whole number of steps. The micro-tare moves
+// the zero point of the load cell underneath the running filters, and only it knows what the weight on
+// the scale really is - the hysteresis would otherwise have to find its way onto that value on its own,
+// from a step it took over readings that counted from the old zero point
+static void setShownV03(double grams) {
+    shownUnits = (int)lround(grams / DISPLAY_STEP);
+    shownPending = shownDirection = shownZeros = 0;
+    shownStarted = true;
+    shownWeight = shownUnits * DISPLAY_STEP;
+}
+
 // The display of v03: it steps like the ordinary hysteresis while the weight moves, but where the
 // detectors say it lies flat - or where a tolerance test is running, see testingTolerance() - a single
 // step also needs v02 to land on that same step. And a shown value within ZERO_V03_GRAMS of zero for
 // ZERO_V03_READINGS readings in a row is shown as a plain zero, and a small negative value is held at
 // zero by holdNegative() - the display only, the weight behind it is untouched and nothing is tared
 static void updateShownV03(double value, double other, double softFlat, bool flat) {
-    static int units = 0, pending = 0, direction = 0, zeros = 0;
-    static bool started = false;
+    int &units = shownUnits, &pending = shownPending, &direction = shownDirection, &zeros = shownZeros;
 
     int wanted = (int)lround(value / DISPLAY_STEP);
-    if (!started) {
+    if (!shownStarted) {
         units = wanted;
-        started = true;
+        shownStarted = true;
     }
     bool strict = softFlat >= HYSTERESIS_FLAT_FROM;
     double extra = strict ? HYSTERESIS_GRAMS_FLAT : HYSTERESIS_GRAMS;
@@ -768,13 +781,18 @@ void scaleStatusLoop(void *p) {
                 }
                 if (cupOver > 0) {
                     // Micro-tare. The readings that recognised the cup say what it really weighs, and
-                    // their average almost never sits on a whole DISPLAY_STEP - 76.34 g, say. The
-                    // hysteresis has snapped the shown weight onto 76.3 g anyway, so the zero point is
-                    // moved by those 0.04 g and the step becomes the truth instead of a rounding of it.
-                    // Everything from here on counts from a cup that weighs exactly what is displayed
+                    // their average almost never sits on a whole DISPLAY_STEP - 76.34 g, say. The zero
+                    // point is moved by those 0.04 g, so the step becomes the truth instead of a
+                    // rounding of it, and the display is put on it: it rounds the value of v01 and the
+                    // hysteresis holds that where it is, which is up to a step away from the average of
+                    // the raw readings the cup weight comes from. Everything from here on counts from a
+                    // cup that weighs exactly what is displayed
                     double resting = rawData.averageOfLast(cupOver);
                     cupWeightEmpty = lround(resting / DISPLAY_STEP) * DISPLAY_STEP;
                     microTare(resting - cupWeightEmpty);
+#if FILTER == FILTER_V03
+                    setShownV03(cupWeightEmpty); // the display shows the cup the dose counts from
+#endif
                     scaleStatus = STATUS_GRINDING_IN_PROGRESS;
                     grindLogBegin(); // from here on every reading of the load cell is logged
                     grindLogMark("microtare cup=%.2f was=%.3f", cupWeightEmpty, resting);
