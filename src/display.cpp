@@ -68,9 +68,12 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define BOOT_BAR_Y 54
 #define BOOT_BAR_HEIGHT 9
 
-// Progress bar of the grinding screen, filled towards the set weight
+// Progress bar of the grinding screen: a scale from the empty cup to the set weight, with ticks at
+// both ends and at the progress, which is drawn as a thicker line than the part still missing
 #define GRIND_BAR_Y 39
 #define GRIND_BAR_HEIGHT 12
+#define GRIND_BAR_TICK_HEIGHT 9 // height of the ticks at start, progress and set weight
+#define GRIND_BAR_DONE_HEIGHT 3 // thickness of the line up to the progress tick, the rest is one pixel
 #define GRIND_BAR_EASING 8.0f // how fast the drawn bar follows the reading (1/s), the scale only reports twice a second
 
 // A weight that rounds to zero is shown without a sign: a reading a few hundredths below the cup
@@ -755,13 +758,16 @@ static void drawGrindProgress(float progress)
   grindBarDrawnAt = now;
   grindBarFill += (progress - grindBarFill) * min(1.0f, dt * GRIND_BAR_EASING);
 
-  screen.drawFrame(0, GRIND_BAR_Y, 128, GRIND_BAR_HEIGHT);
-  int inside = 128 - 2; // the fill sits directly against the frame, without a gap
-  int fill = constrain((int)(grindBarFill * inside), 0, inside - 1); // always one pixel short of full
-  if (fill > 0)
-  {
-    screen.drawBox(1, GRIND_BAR_Y + 1, fill, GRIND_BAR_HEIGHT - 2);
-  }
+  int centerY = GRIND_BAR_Y + GRIND_BAR_HEIGHT / 2;
+  int tickY = centerY - GRIND_BAR_TICK_HEIGHT / 2;
+  int span = 127; // the ticks of start and set weight sit on the first and the last column
+  int progressX = constrain((int)(grindBarFill * span), 0, span - 1); // always one pixel short of the end
+
+  screen.drawHLine(0, centerY, 128); // the whole scale, the ground part is drawn over it thicker
+  screen.drawBox(0, centerY - GRIND_BAR_DONE_HEIGHT / 2, progressX + 1, GRIND_BAR_DONE_HEIGHT);
+  screen.drawVLine(0, tickY, GRIND_BAR_TICK_HEIGHT);
+  screen.drawVLine(progressX, tickY, GRIND_BAR_TICK_HEIGHT);
+  screen.drawVLine(127, tickY, GRIND_BAR_TICK_HEIGHT);
 }
 
 // Draws the current state once (also used by the display simulator in sim/)
