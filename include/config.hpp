@@ -44,6 +44,12 @@ struct GrindRecord
 #define WEIGHT_DATA_SETTING 12 // currentSetting while the Weight Data is shown
 #define STYLE_MENU_SETTING 15 // currentSetting while the Style submenu is shown
 #define GRIND_SCREEN_SETTING 16 // currentSetting while the grinding screen style is chosen
+
+// How the grinding screen shows the progress, chosen in the Style menu
+#define GRIND_STYLE_BAR 0    // a bar below the weights (default)
+#define GRIND_STYLE_INVERT 1 // the whole screen is inverted from the bottom up
+#define GRIND_STYLE_FRAME 2  // a border grows out of the middle of the top and bottom edge around the corners
+#define GRIND_STYLE_COUNT 3
 #define WEIGHT_DATA_SIZE 128 // readings it keeps, one per pixel column; the grind also works on them
 
 // The Weight History is too wide for the display, so the scale itself turns the pages:
@@ -289,7 +295,7 @@ extern double deadTimeEnd; // s the grinder keeps delivering after the switch-of
 extern double grindFlow;   // g/s, the mass flow the running grind is being stopped by
 extern bool scaleMode;
 extern bool grindMode;
-extern bool grindScreenInvert; // grinding screen: progress bar (false, default) or inverted screen (true)
+extern int grindScreenStyle; // how the grinding screen shows the progress, one of GRIND_STYLE_*
 extern bool greset;
 extern int menuItemsCount;
 extern double setCupWeight;

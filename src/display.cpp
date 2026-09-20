@@ -69,12 +69,14 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define BOOT_BAR_HEIGHT 9
 
 // Progress of the grinding screen towards the set weight, shown in the style chosen in the Style menu:
-// as a bar, a scale with ticks at both ends and at the progress, or by inverting the whole screen
+// as a bar, a scale with ticks at both ends and at the progress, by inverting the whole screen or as a
+// border growing around it
 #define GRIND_BAR_Y 39
 #define GRIND_BAR_HEIGHT 12
 #define GRIND_BAR_TICK_HEIGHT 9 // height of the ticks at start, progress and set weight
 #define GRIND_BAR_DONE_HEIGHT 3 // thickness of the line up to the progress tick, the rest is one pixel
 #define GRIND_PROGRESS_HEIGHT 64 // rows of the display, the whole screen is inverted at the set weight
+#define GRIND_FRAME_THICKNESS 2 // thickness of the border that grows around the screen
 #define GRIND_PROGRESS_EASING 8.0f // how fast the drawn progress follows the reading (1/s), the scale only reports twice a second
 
 // A weight that rounds to zero is shown without a sign: a reading a few hundredths below the cup
@@ -186,7 +188,9 @@ void styleMenuOnClick()
     Serial.println("Grinding Screen Menu");
 }
 
-// How the grinding screen shows the progress, turning switches between the two, clicking saves
+static const char *grindStyleNames[GRIND_STYLE_COUNT] = {"Bar (default)", "Invert", "Frame"};
+
+// How the grinding screen shows the progress, turning steps through the styles, clicking saves
 void showGrindScreenMenu()
 {
   screen.clearBuffer();
@@ -194,15 +198,17 @@ void showGrindScreenMenu()
   screen.setFont(u8g2_font_7x14B_tf);
   CenterPrintToScreen("Grinding Screen", 0);
   screen.setFont(u8g2_font_7x13_tr);
-  if (grindScreenInvert)
+  for (int i = 0; i < GRIND_STYLE_COUNT; i++)
   {
-    LeftPrintToScreen("Bar (default)", 19);
-    LeftPrintActiveToScreen("Invert", 35);
-  }
-  else
-  {
-    LeftPrintActiveToScreen("Bar (default)", 19);
-    LeftPrintToScreen("Invert", 35);
+    u8g2_uint_t y = 19 + i * 16;
+    if (i == grindScreenStyle)
+    {
+      LeftPrintActiveToScreen(grindStyleNames[i], y);
+    }
+    else
+    {
+      LeftPrintToScreen(grindStyleNames[i], y);
+    }
   }
   screen.sendBuffer();
 }
@@ -843,6 +849,36 @@ static void drawGrindBar(float shown, bool complete)
   screen.drawVLine(127, tickY, GRIND_BAR_TICK_HEIGHT);
 }
 
+// The progress as a border growing around the screen: four arms start in the middle of the top and the
+// bottom edge, run outwards to the corners and from there along the sides back towards the middle, so
+// at the set weight the border is closed. Drawn like the inversion, a lit pixel under an arm goes dark.
+static void drawGrindFrame(float shown, bool complete)
+{
+  int t = GRIND_FRAME_THICKNESS;
+  int armLength = 64 + (32 - t); // half an edge outwards, then along the side to the middle
+  int drawn = (int)ceilf(shown * armLength);
+  drawn = constrain(drawn, 0, complete ? armLength : armLength - 1);
+  int along = min(drawn, 64);  // pixels on the top or bottom edge
+  int down = drawn - along;    // pixels on the left or right side, the corner belongs to the edge
+
+  screen.setDrawColor(2);
+  if (along > 0)
+  {
+    screen.drawBox(64 - along, 0, along, t);       // top left
+    screen.drawBox(64, 0, along, t);               // top right
+    screen.drawBox(64 - along, 64 - t, along, t);  // bottom left
+    screen.drawBox(64, 64 - t, along, t);          // bottom right
+  }
+  if (down > 0)
+  {
+    screen.drawBox(0, t, t, down);                 // left side from the top
+    screen.drawBox(128 - t, t, t, down);           // right side from the top
+    screen.drawBox(0, 64 - t - down, t, down);     // left side from the bottom
+    screen.drawBox(128 - t, 64 - t - down, t, down); // right side from the bottom
+  }
+  screen.setDrawColor(1);
+}
+
 // The progress by inverting the screen from the bottom up
 static void invertGrindScreen(float shown, bool complete)
 {
@@ -869,13 +905,17 @@ static void showGrindProgress(float progress, bool complete)
   grindProgressShown += ((complete ? 1.0f : progress) - grindProgressShown) * min(1.0f, dt * GRIND_PROGRESS_EASING);
 
   // The easing only approaches the target, so the last pixels are rounded up to reach the end
-  if (grindScreenInvert)
+  switch (grindScreenStyle)
   {
+  case GRIND_STYLE_INVERT:
     invertGrindScreen(grindProgressShown, complete);
-  }
-  else
-  {
+    break;
+  case GRIND_STYLE_FRAME:
+    drawGrindFrame(grindProgressShown, complete);
+    break;
+  default:
     drawGrindBar(grindProgressShown, complete);
+    break;
   }
 }
 

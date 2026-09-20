@@ -243,8 +243,8 @@ void rotary_onButtonClick()
                 preferences.putBool("scaleMode", false);
                 grindMode = true;
                 preferences.putBool("grindMode", true);
-                grindScreenInvert = false;
-                preferences.putBool("grindInvert", false);
+                grindScreenStyle = GRIND_STYLE_BAR;
+                preferences.putInt("grindStyle", GRIND_STYLE_BAR);
                 shotCount = SHOT_COUNT_DEFAULT;
                 preferences.putUInt("shotCount", shotCount);
                 loadcell.set_scale(scaleFactor);
@@ -322,7 +322,7 @@ void rotary_onButtonClick()
         case GRIND_SCREEN_SETTING: // Grinding screen style
         {
             preferences.begin("scale", false);
-            preferences.putBool("grindInvert", grindScreenInvert);
+            preferences.putInt("grindStyle", grindScreenStyle);
             preferences.end();
             currentSetting = STYLE_MENU_SETTING; // Back to the Style Menu
             break;
@@ -401,8 +401,9 @@ void rotary_loop()
                 encoderValue = newValue;
             }
             else if (currentSetting == GRIND_SCREEN_SETTING)
-            { // Grinding screen style, turning switches between the two
-                grindScreenInvert = !grindScreenInvert;
+            { // Grinding screen style, turning steps through the styles
+                grindScreenStyle = (grindScreenStyle + (newValue - encoderValue) * -encoderDir) % GRIND_STYLE_COUNT;
+                grindScreenStyle = grindScreenStyle < 0 ? GRIND_STYLE_COUNT + grindScreenStyle : grindScreenStyle;
                 encoderValue = newValue;
             }
             else if (currentSetting == GRIND_HISTORY_SETTING)

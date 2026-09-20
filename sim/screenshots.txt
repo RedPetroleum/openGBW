@@ -29,7 +29,7 @@ click; turn 1; click; shot grinding-mode
 click; turn 1; click; shot info
 click; turn 1; click; shot sleep-timer
 click; turn 1; click; shot style-menu
-turn 1; click; shot grinding-screen # the style of the grinding screen, bar or inverted
+turn 1; click; shot grinding-screen # the style of the grinding screen: bar, inverted or frame
 click; turn 1; click # saving returns to the Style menu, leave it over its own Exit
 turn 1; click; shot reset
 click; turn 1; click; shot games-menu

@@ -233,8 +233,8 @@ static bool setVariable(const std::string &name, const std::string &text, int li
     scaleMode = value != 0;
   else if (name == "grindMode")
     grindMode = value != 0;
-  else if (name == "grindScreenInvert")
-    grindScreenInvert = value != 0;
+  else if (name == "grindScreenStyle")
+    grindScreenStyle = value;
   else if (name == "scaleStatus")
     scaleStatus = value;
   else if (name == "currentSetting")
