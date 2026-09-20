@@ -244,6 +244,10 @@ static bool setVariable(const std::string &name, const std::string &text, int li
     currentSetting = value;
   else if (name == "currentMenuItem")
     currentMenuItem = value;
+  else if (name == "confirmedDose")
+    confirmedDose = value;
+  else if (name == "flowAtSwitchOff")
+    flowAtSwitchOff = value;
   else if (name == "verifiedAgo") // seconds since the readings count towards the confirmed dose
     doseVerifiedFrom = simTime - (unsigned long)(value * 1000);
   else if (name == "grindTime") // seconds since grinding started (and finished grinds took)

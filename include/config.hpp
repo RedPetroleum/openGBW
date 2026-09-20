@@ -302,6 +302,8 @@ extern unsigned long startedGrindingAt;
 extern unsigned long finishedGrindingAt;
 extern unsigned long doseVerifiedFrom; // from when the readings are averaged into the confirmed dose
 double verifiedDose();                 // that average, what the finished screen judges the grind by
+extern double confirmedDose;    // g, the dose the grind was confirmed with, the dead time is calibrated from it
+extern double flowAtSwitchOff;  // g/s, the mass flow at the moment the grinder was switched off
 extern double setWeight;
 extern double deadTimeEnd; // s the grinder keeps delivering after the switch-off, calibrated per grind
 extern double grindFlow;   // g/s, the mass flow the running grind is being stopped by

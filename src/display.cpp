@@ -1095,27 +1095,32 @@ static void drawDeviationScale(double deviation)
   screen.drawVLine(zeroX, y - DEVIATION_ZERO_ABOVE, DEVIATION_ZERO_HEIGHT); // the set weight
 }
 
-// The second page of the finished screen: which grind it was, how long it ran, the dose it ended up
-// with and the throughput that makes - the average over the whole grind, not the flow at the end
+// The second page of the finished screen: which grind it was, how long it ran, and the two numbers the
+// dead time is calibrated from - the dose the grind was confirmed with and the mass flow the grinder
+// was switched off at. Both stand still from the moment the dose is confirmed
 static void drawGrindDetails()
 {
   long grindMs = (long)(finishedGrindingAt - startedGrindingAt); // survives a wrap of millis()
   bool timed = startedGrindingAt > 0 && grindMs > 0;
-  double seconds = timed ? grindMs / 1000.0 : 0;
-  double dose = noMinusZero(verifiedDose());
 
   const char *labels[FINISHED_DETAIL_ROWS] = {"Shot", "Time", "Dose", "Flow"};
   char values[FINISHED_DETAIL_ROWS][16];
   snprintf(values[0], sizeof(values[0]), "%u", shotCount);
-  snprintf(values[2], sizeof(values[2]), "%.2f g", dose);
+  snprintf(values[2], sizeof(values[2]), "%.2f g", confirmedDose);
   if (timed)
   {
-    snprintf(values[1], sizeof(values[1]), "%.1f s", seconds);
-    snprintf(values[3], sizeof(values[3]), "%.0f mg/s", dose * 1000 / seconds);
+    snprintf(values[1], sizeof(values[1]), "%.1f s", grindMs / 1000.0);
   }
   else
   {
     strcpy(values[1], "-"); // a grind in scale mode that never started counting
+  }
+  if (flowAtSwitchOff > 0)
+  {
+    snprintf(values[3], sizeof(values[3]), "%.0f mg/s", flowAtSwitchOff * 1000);
+  }
+  else
+  {
     strcpy(values[3], "-");
   }
 

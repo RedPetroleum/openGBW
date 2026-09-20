@@ -53,6 +53,8 @@ unsigned long verifyingFrom = 0; // from when readings count towards the dose, s
 // From when the readings are averaged into the dose the finished screen shows: the oldest reading of
 // the steadiness window that confirmed the dose, 0 while no grind has been confirmed
 unsigned long doseVerifiedFrom = 0;
+double confirmedDose = 0; // g, the dose the grind was confirmed with, the one the dead time is
+                          // calibrated from; it stands still while the screen shows it
 const char *grindFailReason = ""; // Why the last grind was aborted, shown on the display
 
 // Tares the scale (sets the current weight to zero). A tare is wanted while lastTareAt is zero, and
@@ -827,6 +829,7 @@ void scaleStatusLoop(void *p) {
                     flowAtSwitchOff = 0;
                     doseAtSwitchOff = 0;
                     doseVerifiedFrom = 0;
+                    confirmedDose = 0;
                     stopLineFromReading = stopLineAt = switchOffAt = 0;
                     stopLineDose = 0;
                     grinderToggle();
@@ -944,6 +947,7 @@ void scaleStatusLoop(void *p) {
                     }
                     break;
                 }
+                confirmedDose = dose; // what the dose is, from here on nothing changes it any more
                 double usedDeadTime = deadTimeEnd;
                 if (newDeadTime) {
                     // What still arrived after the switch-off says how long the dead time really was;
