@@ -1847,6 +1847,29 @@ static int switchOffX(unsigned long at)
   return (int)constrain(since * 127 / span, -200L, 400L); // off the screen stays off the screen
 }
 
+// One reading of the recording: a cross of five pixels, so a single reading stands out from the lines
+// it sits on. Arms that would leave the drawing are left off
+static void drawSwitchOffReading(int x, int y)
+{
+  screen.drawPixel(x, y);
+  if (x > 0)
+  {
+    screen.drawPixel(x - 1, y);
+  }
+  if (x < 127)
+  {
+    screen.drawPixel(x + 1, y);
+  }
+  if (y > SWITCHOFF_TOP)
+  {
+    screen.drawPixel(x, y - 1);
+  }
+  if (y < SWITCHOFF_BOTTOM)
+  {
+    screen.drawPixel(x, y + 1);
+  }
+}
+
 // A vertical through the whole drawing, dotted so the readings stay readable where they cross it
 static void drawSwitchOffMoment(int x)
 {
@@ -1948,7 +1971,7 @@ static void drawSwitchOffPage()
     }
   }
 
-  // The readings themselves on top of it all, each one a dot the way the logs are drawn
+  // The readings themselves on top of it all, each one a small cross the way the logs are drawn
   for (int i = 0; i < switchOffCount; i++)
   {
     int x = switchOffX(switchOffAt[i]);
@@ -1956,7 +1979,7 @@ static void drawSwitchOffPage()
     {
       continue;
     }
-    screen.drawPixel(x, y(switchOffDose[i] / 100.0f));
+    drawSwitchOffReading(x, y(switchOffDose[i] / 100.0f));
   }
 
   // Names the drawing, in the same corner as on the two pages after it. Every line of it can run
