@@ -6,7 +6,7 @@ delivered and nothing in between. Over the points run the filters, as thin lines
 plus an overview with all grinds on top of each other when there is more than one (points only, filters
 of three grinds at once cannot be told apart).
 
-    tools/plotgrind.py                       # all logs in logs/, images into logs/plots/
+    tools/plotgrind.py                       # all logs in logs/, images into logs/plots/filter/
     tools/plotgrind.py logs/grind-*.csv --out /tmp/plots
     tools/plotgrind.py --show                # open the windows instead of writing files
     tools/plotgrind.py --net                 # weight without the cup, so the axis starts at zero
@@ -583,6 +583,25 @@ def hysteresis_v03(values, soft_flat, flat_decided, other, step=DISPLAY_STEP):
     return out
 
 
+def v02_detectors(t, values):
+    """The three detectors of v01 on the raw readings and the answer v02 makes of them, one per reading.
+
+    `grinding` also needs how fast the weight really moves, which is what the fourth panel of a grind
+    draws. Returns (flat, placed, grinding, answer of v02); v03 asks the answer before it takes a fine
+    step, see hysteresis_v03()
+    """
+    average = moving_average(t, values, AVERAGE_PANEL)[1]
+    change = derivative(t, average)
+    longest = max(FLAT_V01_LONG, GRIND_V01_LONG)
+    flat, placed, grinding = [], [], []
+    for index in range(len(values)):
+        recent = values[max(0, index - longest + 1):index + 1]
+        flat.append(flat_v01(recent, change[index]))
+        placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
+        grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent, change[index]))
+    return flat, placed, grinding, [decide_v02(*three) for three in zip(flat, placed, grinding)]
+
+
 def v03(t, values, flat_decided):
     """Always the value of v01; v02 only has a say in the hysteresis, see hysteresis_v03().
 
@@ -730,19 +749,10 @@ def plot_grind(log, theme, path, show, net, raw, step, lines=()):
                     end.get("reason", "?"), len(samples)))
     figure.suptitle(title, fontsize=11, x=0.01, ha="left")
 
-    # The three detectors of v01, each on the raw readings; grinding also needs how fast the weight
-    # really moves, which is what the fourth panel draws. They come first because v03 uses their answer
-    average = moving_average(t, values, AVERAGE_PANEL)[1]
-    change = derivative(t, average)
-    longest = max(FLAT_V01_LONG, GRIND_V01_LONG)
-    flat, placed, grinding = [], [], []
-    for index in range(len(values)):
-        recent = values[max(0, index - longest + 1):index + 1]
-        flat.append(flat_v01(recent, change[index]))
-        placed.append(placed_v01(values[index - 1] if index else values[0], values[index]))
-        grinding.append(grinding_v01(t[max(0, index - longest + 1):index + 1], recent, change[index]))
-    result = [decide_v02(*three) for three in zip(flat, placed, grinding)]
+    # The three detectors of v01 and the answer v02 makes of them; v03 asks it before it steps
+    flat, placed, grinding, result = v02_detectors(t, values)
     flat_decided = [one[0] for one in result]
+    change = derivative(t, moving_average(t, values, AVERAGE_PANEL)[1]) # how fast the weight moves
 
     axis.plot(t, values, linestyle="none", marker="o", markersize=2.8,
               color=theme["series"][0], markeredgewidth=0, label="Messwerte", zorder=3)
@@ -870,7 +880,8 @@ def plot_overview(logs, theme, path, show, net, raw, step):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("logs", nargs="*", help="log files (default: logs/*.csv)")
-    parser.add_argument("--out", default="logs/plots", help="folder for the images (logs/plots)")
+    parser.add_argument("--out", default="logs/plots/filter",
+                        help="folder for the images (logs/plots/filter)")
     parser.add_argument("--show", action="store_true", help="open the windows instead of writing files")
     parser.add_argument("--dark", action="store_true", help="draw on a dark surface")
     parser.add_argument("--net", action="store_true", help="weight without the cup")
