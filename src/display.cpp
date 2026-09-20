@@ -96,11 +96,12 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define DEVIATION_HALF_WIDTH 60   // pixels from the middle of the scale to either end
 #define DEVIATION_END_HEIGHT 7    // the marks at the ends stand this tall on the line ...
 #define DEVIATION_TICK_HEIGHT 4   // ... the ticks between them this tall
-#define DEVIATION_TICK_MIN_GAP 2  // a tick this close to the end of the scale is left out, it would only
-                                  // cancel the mark there out again
 #define DEVIATION_ZERO_ABOVE 9    // the mark for the set weight starts this far above the line ...
 #define DEVIATION_ZERO_HEIGHT 13  // ... and reaches past it
 #define DEVIATION_BAR_HEIGHT 5    // thickness of the bar from the middle to the dose
+#define DEVIATION_VALUE_TOP 1     // first row of the deviation over the scale ...
+#define DEVIATION_SIGN_CENTER 10  // ... and the row its sign is centered on, just above the middle of
+                                  // the digits, where a sign of its own size would sit too low
 
 // A weight that rounds to zero is shown without a sign: a reading a few hundredths below the cup
 // weight would otherwise appear as "-0.0" while the grinder is running
@@ -1032,8 +1033,8 @@ static void drawDeviationScale(double deviation)
   int doseX = zeroX + (int)lroundf(constrain(deviation / range, -1.0f, 1.0f) * half);
   screen.drawBox(min(doseX, zeroX), y - DEVIATION_BAR_HEIGHT, abs(doseX - zeroX) + 1, DEVIATION_BAR_HEIGHT);
 
-  // The marks are drawn over the bar: where it covers them they stay readable as dark notches in it
-  screen.setDrawColor(2); // XOR
+  // Every mark is drawn solid, so nothing of the line, of the bar or of a mark is rubbed out where
+  // they meet: a mark the bar covers simply becomes part of it
   screen.drawVLine(zeroX - half, y - DEVIATION_END_HEIGHT + 1, DEVIATION_END_HEIGHT);
   screen.drawVLine(zeroX + half, y - DEVIATION_END_HEIGHT + 1, DEVIATION_END_HEIGHT);
 
@@ -1042,16 +1043,11 @@ static void drawDeviationScale(double deviation)
   for (int tick = 1; tick * tickStep <= range; tick++)
   {
     int dx = (int)lroundf(tick * tickStep / range * half);
-    if (half - dx < DEVIATION_TICK_MIN_GAP)
-    {
-      break; // it would fall on the mark at the end of the scale and rub it out
-    }
     screen.drawVLine(zeroX - dx, y - DEVIATION_TICK_HEIGHT + 1, DEVIATION_TICK_HEIGHT);
     screen.drawVLine(zeroX + dx, y - DEVIATION_TICK_HEIGHT + 1, DEVIATION_TICK_HEIGHT);
   }
 
   screen.drawVLine(zeroX, y - DEVIATION_ZERO_ABOVE, DEVIATION_ZERO_HEIGHT); // the set weight
-  screen.setDrawColor(1);
 }
 
 // The grind as a curve: how the weight in the cup grew over the whole grind, with the set weight as a
@@ -1312,10 +1308,20 @@ void refreshDisplay()
       double deviation = dose - setWeight;
       double shownDeviation = lround(deviation * 100) == 0 ? 0.0 : deviation; // no "-0.00"
 
-      screen.setFontPosTop();
+      // The sign is drawn on its own, one size larger than the digits and a little above their middle
+      const char *sign = shownDeviation > 0 ? "+" : (shownDeviation < 0 ? "-" : "");
+      snprintf(buf, sizeof(buf), "%.2f g", fabs(shownDeviation));
+      screen.setFont(u8g2_font_logisoso18_tn);
+      int signWidth = screen.getStrWidth(sign);
       screen.setFont(u8g2_font_logisoso16_tf);
-      snprintf(buf, sizeof(buf), shownDeviation == 0 ? "%.2f g" : "%+.2f g", shownDeviation);
-      CenterPrintToScreen(buf, 1);
+      int valueLeft = 64 - (signWidth + screen.getStrWidth(buf)) / 2;
+      screen.setFontPosTop();
+      screen.setCursor(valueLeft + signWidth, DEVIATION_VALUE_TOP);
+      screen.print(buf);
+      screen.setFont(u8g2_font_logisoso18_tn);
+      screen.setFontPosCenter();
+      screen.setCursor(valueLeft, DEVIATION_SIGN_CENTER);
+      screen.print(sign);
 
       drawDeviationScale(deviation);
 
