@@ -795,13 +795,44 @@ bool isCupDetected(double cupWeight) {
 
 // The dose the finished screen shows: the average of the raw readings since the steadiness window that
 // confirmed it began. Every reading that arrives afterwards goes into it, so the value only gets
-// quieter as long as the cup stands still. Falls back to the displayed weight where no grind has been
-// confirmed
+// quieter as long as nothing happens - and where something does happen, it starts over: see
+// VERIFY_RESTART_READINGS in config.hpp. Falls back to the displayed weight where no grind has been
+// confirmed. Reads the buffer on every call and keeps no state of its own, so it always answers for
+// the readings that are in it right now
 double verifiedDose() {
-    if (doseVerifiedFrom == 0 || rawData.countSamplesSince(doseVerifiedFrom) == 0) {
+    static double readings[WEIGHT_DATA_SIZE]; // only ever used from the display task
+    size_t count = 0;
+    if (doseVerifiedFrom != 0) {
+        // The buffer hands its readings over newest first, the average is built up the other way round
+        rawData.executeOnSamplesSince(doseVerifiedFrom, [&](double value, int64_t at) {
+            if (count < WEIGHT_DATA_SIZE) {
+                readings[count++] = value;
+            }
+        });
+    }
+    if (count == 0) {
         return shownWeight - cupWeightEmpty;
     }
-    return rawData.averageSince(doseVerifiedFrom) - cupWeightEmpty;
+    double sum = 0, pending = 0;
+    int taken = 0, outliers = 0;
+    for (int i = (int)count - 1; i >= 0; i--) {
+        double value = readings[i];
+        if (taken > 0 && ABS(value - sum / taken) > VERIFY_RESTART_SIGMAS * VERIFY_NOISE_SIGMA) {
+            pending += value; // it may be the start of a new weight, it is not in the average yet
+            if (++outliers >= VERIFY_RESTART_READINGS) {
+                sum = pending; // that many in a row are a new weight, the average begins with them
+                taken = outliers;
+                pending = 0;
+                outliers = 0;
+            }
+            continue;
+        }
+        outliers = 0; // back within the noise: whatever was pending was a spike and is left out
+        pending = 0;
+        sum += value;
+        taken++;
+    }
+    return sum / taken - cupWeightEmpty;
 }
 
 // Moves the zero point of the load cell by `grams`. This is not a tare of its own: nothing is measured

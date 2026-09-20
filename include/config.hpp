@@ -205,6 +205,17 @@ extern bool debugMode;
 // the weight of a reading fades in linearly over the first two instead of starting at full strength.
 // For the dose the rule on top of that is that every reading of the window was taken after the delay
 // had run out, so the window can never reach back into the time the last grounds were still landing
+// The average behind the deviation on the finished screen runs over the raw readings from that window
+// on and gets quieter with every reading that arrives - so quiet that a weight put on or taken off by
+// hand after a few seconds would hardly move it. Five readings in a row further than
+// VERIFY_RESTART_SIGMAS sigma from the average are therefore not noise any more but a new weight: the
+// average is thrown away and built up again from the first of those five. Fewer than five in a row are
+// left out of it altogether, so a single spike neither counts nor restarts anything. Sigma is what a
+// resting scale scatters by, measured over the recordings in logs/: 0.05 to 0.08 g, 0.11 in a bad case
+#define VERIFY_NOISE_SIGMA 0.06   // g, the scatter of a resting scale ...
+#define VERIFY_RESTART_SIGMAS 3   // ... this far off it is not noise any more ...
+#define VERIFY_RESTART_READINGS 5 // ... and this many in a row are a new weight
+
 #define VERIFY_WEIGHT_OLDEST 0.33 // a third for the oldest reading of the window ...
 #define VERIFY_WEIGHT_SECOND 0.67 // ... two thirds for the one after it, all the others count fully
 
