@@ -32,7 +32,7 @@ struct GrindRecord
 {
     uint32_t shot;   // shot count after this grind
     float duration;  // grinding time in seconds
-    float deadTime;  // dead time the grinder was stopped with, in seconds
+    float delay;     // delay the grinder was stopped with, in seconds
     float flow;      // mass flow at the moment of the switch-off, in grams per second
     float target;    // target weight of this grind in grams
     float actual;    // weight actually ground in grams, without the cup
@@ -40,7 +40,7 @@ struct GrindRecord
 #define GRIND_HISTORY_SIZE 10 // number of grinds kept in the Weight History
 #define GRIND_HISTORY_ROWS 5  // number of grinds visible at once in the Weight History
 #define GRIND_HISTORY_SETTING 13 // currentSetting while the Weight History is shown
-#define GRIND_HISTORY_PAGES 2 // column pages of the Weight History: time/dead time/flow and target/actual/difference
+#define GRIND_HISTORY_PAGES 2 // column pages of the Weight History: time/delay/flow and target/actual/difference
 #define WEIGHT_DATA_SETTING 12 // currentSetting while the Weight Data is shown
 #define STYLE_MENU_SETTING 15 // currentSetting while the Style submenu is shown
 #define GRIND_SCREEN_SETTING 16 // currentSetting while the grinding screen style is chosen
@@ -184,7 +184,7 @@ extern bool debugMode;
 // The same two decide whether a cup is standing on the scale and whether the dose has settled after
 // grinding, so both answers come from the same idea of "not moving". The difference between the two is
 // only what else has to be true: for a cup the readings must also lie around the cup weight, for the
-// dose they must all have been taken after the dead time.
+// dose they must all have been taken after the delay.
 //
 // They look at the raw readings, which arrive at the full 10 Hz of the HX711 whatever the filter does -
 // the filter lays a line through its window and would report a smooth value even where the readings
@@ -219,7 +219,7 @@ extern bool debugMode;
 
 // Stopping the grinder early, modelled on the mass flow instead of a fixed offset in grams.
 //
-// Two dead times are at work. At the front the grinder needs a moment before the first grounds reach
+// Two delays are at work. At the front the grinder needs a moment before the first grounds reach
 // the scale, at the back it keeps delivering for a moment after it has been switched off. The front
 // one is a fixed assumption, the back one is what decides the dose and is therefore calibrated after
 // every grind.
@@ -229,27 +229,27 @@ extern bool debugMode;
 // off the line rather than from the reading is what keeps a vibration spike from stopping the grinder
 // early - a spike moves a line through dozens of readings by a fraction of what it moves the reading.
 // For the first FLOW_EARLY_UNTIL seconds the line is still too short for a slope worth trusting, so
-// the flow is the ground weight divided by the running time less the dead time at the front,
-// m = x / (t - FLOW_START_DEAD_TIME); x comes off the line from the start.
+// the flow is the ground weight divided by the running time less the delay at the front,
+// m = x / (t - FLOW_START_DELAY); x comes off the line from the start.
 //
-// The grinder is switched off as soon as the weight it will still deliver during its dead time carries
-// the dose over the target: x + m * deadTimeEnd >= setWeight. What actually arrived afterwards tells
-// how long that dead time really was, deadTimeEnd is corrected towards it, and so the dose settles in
+// The grinder is switched off as soon as the weight it will still deliver during its delay carries
+// the dose over the target: x + m * delayEnd >= setWeight. What actually arrived afterwards tells
+// how long that delay really was, delayEnd is corrected towards it, and so the dose settles in
 // over a few grinds the way the offset used to.
-#define FLOW_START_DEAD_TIME 0.8 // s until the first grounds reach the scale, assumed for the early flow
-#define FLOW_EARLY_MIN_RUN 0.2   // s of grinding past that dead time before the early flow says anything
+#define FLOW_START_DELAY 0.8     // s until the first grounds reach the scale, assumed for the early flow
+#define FLOW_EARLY_MIN_RUN 0.2   // s of grinding past that delay before the early flow says anything
 #define FLOW_EARLY_UNTIL 5.0     // s after the start up to which the early flow is used ...
 #define FLOW_WINDOW 4.0          // ... from there the slope of a line through this many seconds of readings
 #define FLOW_WINDOW_MIN_READINGS 5 // below this the window has no line, x is the plain reading
 
-#define DEAD_TIME_END_DEFAULT 0.3 // s the grinder keeps delivering after it was switched off, start value
-#define DEAD_TIME_MIN 0.0 // s, the calibrated dead time stays between these two ...
-#define DEAD_TIME_MAX 2.0
-#define DEAD_TIME_CORRECTION 0.4 // ... and only this share of the last deviation goes into it, so a single
-                                 // odd grind does not swing it around. It adds up over the grinds, so a
-                                 // smaller share only settles slower, it does not leave an error
-#define DEAD_TIME_MIN_FLOW 0.3 // g/s, below this flow at the switch-off the dead time cannot be measured
-                               // (the division blows a small overshoot up into seconds), the grind is skipped
+#define DELAY_END_DEFAULT 0.3 // s the grinder keeps delivering after it was switched off, start value
+#define DELAY_MIN 0.0 // s, the calibrated delay stays between these two ...
+#define DELAY_MAX 2.0
+#define DELAY_CORRECTION 0.4 // ... and only this share of the last deviation goes into it, so a single
+                             // odd grind does not swing it around. It adds up over the grinds, so a
+                             // smaller share only settles slower, it does not leave an error
+#define DELAY_MIN_FLOW 0.3 // g/s, below this flow at the switch-off the delay cannot be measured
+                           // (the division blows a small overshoot up into seconds), the grind is skipped
 
 // The readings come ten times a second, so switching off on the first one that lies past the target
 // would be up to a tenth of a second late - at 2 g/s a fifth of a gram, and that lateness is a
@@ -263,8 +263,8 @@ extern bool debugMode;
 #define SHOT_COUNT_DEFAULT 299 // start value of the shot counter (used on first start and on reset)
 #define NO_PROGRESS_START_DELAY 10000 // "no progress" abort is only checked this long (ms) after grinding started
 #define NO_PROGRESS_WINDOW 7000 // ... and only when less than 1g was ground within this window (ms)
-#define FINISHED_MAX_WAIT 6000 // ms the dose has to have settled in, counted from the end of the dead
-                               // time. A grind that has not delivered a steady, plausible reading by
+#define FINISHED_MAX_WAIT 6000 // ms the dose has to have settled in, counted from the end of the
+                               // delay. A grind that has not delivered a steady, plausible reading by
                                // then has failed and is neither counted nor calibrated from
 #define DOSE_PLAUSIBLE_GRAMS 5.0 // g, a settled reading further than this from the target is not the
                                  // dose: a cup that was moved, a hand on the scale, a reading that
@@ -302,12 +302,12 @@ extern unsigned long startedGrindingAt;
 extern unsigned long finishedGrindingAt;
 extern unsigned long doseVerifiedFrom; // from when the readings are averaged into the confirmed dose
 double verifiedDose();                 // that average, what the finished screen judges the grind by
-extern double confirmedDose;    // g, the dose the grind was confirmed with, the dead time is calibrated from it
+extern double confirmedDose;    // g, the dose the grind was confirmed with, the delay is calibrated from it
 extern double flowAtSwitchOff;  // g/s, the mass flow at the moment the grinder was switched off
-extern double deadTimeUsed;     // s, the dead time the last grind was stopped with ...
-extern double deadTimeMeasured; // ... and the one its dose says it really was, 0 where it says nothing
+extern double delayUsed;     // s, the delay the last grind was stopped with ...
+extern double delayMeasured; // ... and the one its dose says it really was, 0 where it says nothing
 extern double setWeight;
-extern double deadTimeEnd; // s the grinder keeps delivering after the switch-off, calibrated per grind
+extern double delayEnd;    // s the grinder keeps delivering after the switch-off, calibrated per grind
 extern double grindFlow;   // g/s, the mass flow the running grind is being stopped by
 extern bool scaleMode;
 extern bool grindMode;

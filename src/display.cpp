@@ -106,7 +106,7 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define DEVIATION_SIGN_GAP 3      // pixels between the sign and the first digit
 
 // Second page of the finished screen: what the grind itself was, as four rows of label and value
-#define FINISHED_PAGES 3          // deviation, details and dead time, the knob pages between them
+#define FINISHED_PAGES 3          // deviation, details and delay, the knob pages between them
 #define FINISHED_DETAIL_ROWS 4
 #define FINISHED_DETAIL_TOP 3     // first row of the topmost line ...
 #define FINISHED_DETAIL_STEP 15   // ... and the distance to the next one
@@ -146,7 +146,7 @@ MenuItem menuItems[13] = {
     {1, false, "Cup Weight 1", 1, &setCupWeight},
     {2, false, "Cup Weight 2", 1, &setCupWeight2},
     {3, false, "Scale Factor", 1, &scaleFactor},
-    {4, false, "Dead Time", 0.01, &deadTimeEnd},
+    {4, false, "Delay", 0.01, &delayEnd},
     {5, false, "Scale Mode", 0},
     {6, false, "Grinding Mode", 0},
     {7, false, "Info Menu", 0},
@@ -359,18 +359,18 @@ void showSleepTimerMenu() {
     screen.sendBuffer();
 }
 
-// Function to display the dead time adjustment menu. The dead time is what the grinder still delivers
+// Function to display the delay adjustment menu. The delay is what the grinder still delivers
 // after it was switched off; it calibrates itself after every grind and is only adjustable by hand here
-void showDeadTimeMenu()
+void showDelayMenu()
 {
   char buf[16];
   screen.clearBuffer();
   screen.setFontPosTop();
   screen.setFont(u8g2_font_7x14B_tf);                // Set the font for the menu title
-  CenterPrintToScreen("Adjust dead time", 0);        // Print the menu title
+  CenterPrintToScreen("Adjust delay", 0);        // Print the menu title
   screen.setFont(u8g2_font_7x13_tr);                 // Set the font for the value
-  snprintf(buf, sizeof(buf), "%3.2fs", deadTimeEnd); // Format the dead time
-  CenterPrintToScreen(buf, 28);                      // Print the dead time
+  snprintf(buf, sizeof(buf), "%3.2fs", delayEnd); // Format the delay
+  CenterPrintToScreen(buf, 28);                      // Print the delay
   screen.sendBuffer();                               // Send the buffer to the display
 }
 
@@ -561,7 +561,7 @@ static void grindHistoryScaleInput()
 }
 
 // Function to display the last grinds (newest first, turn to scroll, press the scale for the next page).
-// The header names the columns of the current page: grinding time, dead time and mass flow at the
+// The header names the columns of the current page: grinding time, delay and mass flow at the
 // switch-off, or target, actual weight and difference.
 void showGrindHistory()
 {
@@ -579,7 +579,7 @@ void showGrindHistory()
   }
   LeftPrintToScreen("Shot", 0);
   // Same widths as the values below, so the header sits above its columns
-  RightPrintToScreen(grindHistoryPage == 0 ? "Time   Dead g/s" : "Targ  Act Diff", 0);
+  RightPrintToScreen(grindHistoryPage == 0 ? "Time  Delay g/s" : "Targ  Act Diff", 0);
   for (int row = 0; row < GRIND_HISTORY_ROWS; row++)
   {
     int index = grindHistoryScroll + row;
@@ -589,7 +589,7 @@ void showGrindHistory()
     snprintf(buf, sizeof(buf), "#%lu", (unsigned long)record.shot);
     LeftPrintToScreen(buf, 12 + row * 10);
     if (grindHistoryPage == 0)
-      snprintf(buf, sizeof(buf), "%4.1fs %4.2fs %3.1f", record.duration, record.deadTime, record.flow);
+      snprintf(buf, sizeof(buf), "%4.1fs %4.2fs %3.1f", record.duration, record.delay, record.flow);
     else
       snprintf(buf, sizeof(buf), "%4.1f %4.1f %+4.1f", record.target, record.actual, record.actual - record.target);
     RightPrintToScreen(buf, 12 + row * 10);
@@ -634,8 +634,8 @@ void showInfoMenu() {
     snprintf(buf, sizeof(buf), "Cups: %.1f/%.1fg", setCupWeight, setCupWeight2);
     LeftPrintToScreen(buf, 16);
 
-    // Display the dead time the grinder is stopped with
-    snprintf(buf, sizeof(buf), "Dead Time: %3.2fs", deadTimeEnd);
+    // Display the delay the grinder is stopped with
+    snprintf(buf, sizeof(buf), "Delay: %3.2fs", delayEnd);
     LeftPrintToScreen(buf, 28);
 
     // Display scale factor
@@ -677,7 +677,7 @@ void showSetting()
   }
   else if (currentSetting == 2)
   {
-    showDeadTimeMenu();
+    showDelayMenu();
   }
   else if (currentSetting == 3)
   {
@@ -759,7 +759,7 @@ void handleDebugMenuAction()
         currentSetting = WEIGHT_DATA_SETTING; // Graph is drawn by the display task, click returns to the Debug Menu
         return;
 
-    case 3: // Show Weight History (time, dead time, flow, target and actual weight of the last grinds)
+    case 3: // Show Weight History (time, delay, flow, target and actual weight of the last grinds)
         Serial.println("Displaying Weight History...");
         resetGrindHistoryInput();
         currentSetting = GRIND_HISTORY_SETTING; // Drawn by the display task, turn to scroll, press the scale to page, click returns
@@ -1096,7 +1096,7 @@ static void drawDeviationScale(double deviation)
 }
 
 // The second page of the finished screen: which grind it was, how long it ran, and the two numbers the
-// dead time is calibrated from - the dose the grind was confirmed with and the mass flow the grinder
+// delay is calibrated from - the dose the grind was confirmed with and the mass flow the grinder
 // was switched off at. Both stand still from the moment the dose is confirmed
 static void drawGrindDetails()
 {
@@ -1137,25 +1137,25 @@ static void drawGrindDetails()
   }
 }
 
-// The third page: the dead time of the grinder, the time it keeps delivering after the switch-off.
+// The third page: the delay of the grinder, the time it keeps delivering after the switch-off.
 // The grind ran with one, its dose says what it really was, and the next grind is stopped with the
-// value the two make together (see DEAD_TIME_CORRECTION in config.hpp)
-static void drawDeadTimeDetails()
+// value the two make together (see DELAY_CORRECTION in config.hpp)
+static void drawDelayDetails()
 {
   // The heading carries the unit, the three values are whole milliseconds
-  const char *labels[FINISHED_DETAIL_ROWS] = {"Dead time / ms", "Used", "Measured", "Next"};
+  const char *labels[FINISHED_DETAIL_ROWS] = {"Delay", "Used", "Measured", "Next"};
   char values[FINISHED_DETAIL_ROWS][16];
   values[0][0] = 0; // the first row is the heading of the page
-  snprintf(values[1], sizeof(values[1]), "%.0f", deadTimeUsed * 1000);
-  if (deadTimeMeasured > 0)
+  snprintf(values[1], sizeof(values[1]), "%.0f", delayUsed * 1000);
+  if (delayMeasured > 0)
   {
-    snprintf(values[2], sizeof(values[2]), "%.0f", deadTimeMeasured * 1000);
+    snprintf(values[2], sizeof(values[2]), "%.0f", delayMeasured * 1000);
   }
   else
   {
     strcpy(values[2], "-"); // too little flow at the switch-off to measure it
   }
-  snprintf(values[3], sizeof(values[3]), "%.0f", deadTimeEnd * 1000);
+  snprintf(values[3], sizeof(values[3]), "%.0f", delayEnd * 1000);
 
   screen.setFontPosTop();
   screen.setFont(u8g2_font_7x13_tr);
@@ -1163,8 +1163,19 @@ static void drawDeadTimeDetails()
   {
     LeftPrintToScreen(labels[row], FINISHED_DETAIL_TOP + row * FINISHED_DETAIL_STEP);
   }
+  // The heading in bold, its unit next to it in the normal font, the two together centered
+  const char *unit = " / ms";
   screen.setFont(u8g2_font_7x14B_tf);
-  CenterPrintToScreen(labels[0], FINISHED_DETAIL_TOP);
+  int headingWidth = screen.getStrWidth(labels[0]);
+  screen.setFont(u8g2_font_7x13_tr);
+  int unitWidth = screen.getStrWidth(unit);
+  screen.setFont(u8g2_font_7x14B_tf);
+  screen.setCursor(64 - (headingWidth + unitWidth) / 2, FINISHED_DETAIL_TOP);
+  screen.print(labels[0]);
+  screen.setFont(u8g2_font_7x13_tr);
+  screen.print(unit);
+
+  screen.setFont(u8g2_font_7x14B_tf);
   for (int row = 1; row < FINISHED_DETAIL_ROWS; row++)
   {
     RightPrintToScreen(values[row], FINISHED_DETAIL_TOP + row * FINISHED_DETAIL_STEP);
@@ -1428,7 +1439,7 @@ void refreshDisplay()
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 2)
     {
-      drawDeadTimeDetails();
+      drawDelayDetails();
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED)
     {

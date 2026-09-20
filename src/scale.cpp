@@ -10,7 +10,7 @@ double previousScaleWeight = 0; // Weight of the reading before the current one
 double setWeight = 0;         // Target weight set by the user
 double setCupWeight = 0;      // Weight of the cup set by the user
 double setCupWeight2 = 0;     // Weight of the second cup set by the user
-double deadTimeEnd = DEAD_TIME_END_DEFAULT; // s the grinder keeps delivering after the switch-off
+double delayEnd = DELAY_END_DEFAULT; // s the grinder keeps delivering after the switch-off
 double grindFlow = 0;         // g/s, the mass flow of the running grind, see stopping logic below
 double scaleFactor = LOADCELL_SCALE_FACTOR; // Load cell calibration factor
 bool scaleMode = false;       // Indicates if the scale is used in timer mode
@@ -46,17 +46,17 @@ double cupWeightEmpty = 0;    // Measured weight of the empty cup
 unsigned long startedGrindingAt = 0;  // Timestamp of when grinding started
 unsigned long finishedGrindingAt = 0; // Timestamp of when grinding finished
 bool greset = false;          // Flag for reset operation
-bool newDeadTime = false;     // Indicates the running grind still has to calibrate the dead time
+bool newDelay = false;        // Indicates the running grind still has to calibrate the delay
 double flowAtSwitchOff = 0;   // g/s, the mass flow at the moment the grinder was switched off ...
 double doseAtSwitchOff = 0;   // ... and the ground weight without the cup at that moment
-unsigned long verifyingFrom = 0; // from when readings count towards the dose, switch-off plus dead time
+unsigned long verifyingFrom = 0; // from when readings count towards the dose, switch-off plus delay
 // From when the readings are averaged into the dose the finished screen shows: the oldest reading of
 // the steadiness window that confirmed the dose, 0 while no grind has been confirmed
 unsigned long doseVerifiedFrom = 0;
-double confirmedDose = 0; // g, the dose the grind was confirmed with, the one the dead time is
+double confirmedDose = 0; // g, the dose the grind was confirmed with, the one the delay is
                           // calibrated from; it stands still while the screen shows it
-double deadTimeUsed = 0;     // s, the dead time the last grind was stopped with ...
-double deadTimeMeasured = 0; // ... and the one its dose says it really was, 0 where it says nothing
+double delayUsed = 0;     // s, the delay the last grind was stopped with ...
+double delayMeasured = 0; // ... and the one its dose says it really was, 0 where it says nothing
 const char *grindFailReason = ""; // Why the last grind was aborted, shown on the display
 
 // Tares the scale (sets the current weight to zero). A tare is wanted while lastTareAt is zero, and
@@ -81,8 +81,8 @@ static void tareReset() {
 static void tareTake(long reading) {
     if (tareCount == 0) {
         Serial.println("retaring scale"); // the readings for it come from the sampling loop
-        Serial.println("current dead time");
-        Serial.println(deadTimeEnd);
+        Serial.println("current delay");
+        Serial.println(delayEnd);
     }
     if (tareCount == 0 || reading < tareLowest) {
         tareLowest = reading;
@@ -613,11 +613,11 @@ void grinderToggle() {
 }
 
 // Adds a finished grind to the history (newest first); caller saves it to preferences
-void addGrindRecord(uint32_t shot, float duration, float deadTime, float flow, float target, float actual) {
+void addGrindRecord(uint32_t shot, float duration, float grinderDelay, float flow, float target, float actual) {
     for (int i = GRIND_HISTORY_SIZE - 1; i > 0; i--) {
         grindHistory[i] = grindHistory[i - 1];
     }
-    grindHistory[0] = {shot, duration, deadTime, flow, target, actual};
+    grindHistory[0] = {shot, duration, grinderDelay, flow, target, actual};
     if (grindHistoryCount < GRIND_HISTORY_SIZE) {
         grindHistoryCount++;
     }
@@ -632,7 +632,7 @@ void addGrindRecord(uint32_t shot, float duration, float deadTime, float flow, f
 // says is on the scale at this moment; false while the window holds too few readings for a line
 static bool windowLine(unsigned long now, double *slope, double *fitted) {
     int64_t from = (int64_t)now - (int64_t)(FLOW_WINDOW * 1000);
-    int64_t firstGrounds = (int64_t)startedGrindingAt + (int64_t)(FLOW_START_DEAD_TIME * 1000);
+    int64_t firstGrounds = (int64_t)startedGrindingAt + (int64_t)(FLOW_START_DELAY * 1000);
     if (from < firstGrounds) {
         from = firstGrounds;
     }
@@ -660,7 +660,7 @@ static bool windowLine(unsigned long now, double *slope, double *fitted) {
 // The dose in the cup and the mass flow of the running grind, both taken off that line wherever there
 // is one. The cup sits in every reading of the window as the same constant, so it only has to be taken
 // off the value, not off the slope. Over the first FLOW_EARLY_UNTIL seconds the line is still too short
-// for a slope worth trusting, so the flow is the dose divided by the running time less the dead time at
+// for a slope worth trusting, so the flow is the dose divided by the running time less the delay at
 // the front; the dose itself already comes from the line
 static void grindState(unsigned long now, double *dose, double *flow) {
     double slope = 0, fitted = 0;
@@ -672,7 +672,7 @@ static void grindState(unsigned long now, double *dose, double *flow) {
         *flow = line ? slope : 0;
         return;
     }
-    double since = running - FLOW_START_DEAD_TIME;
+    double since = running - FLOW_START_DELAY;
     // Nothing has reached the scale yet, or so little of it that the division runs away
     *flow = since >= FLOW_EARLY_MIN_RUN && *dose > 0 ? *dose / since : 0;
 }
@@ -685,16 +685,16 @@ static unsigned long stopLineAt = 0;
 static double stopLineDose = 0;
 static unsigned long switchOffAt = 0; // 0 while no switch-off is scheduled
 
-// What the switch-off of the last grind tells about the dead time: the grounds that arrived after it,
-// divided by the flow at that moment. Corrects deadTimeEnd towards it by DEAD_TIME_CORRECTION
-static void calibrateDeadTime(double finalDose) {
-    if (flowAtSwitchOff < DEAD_TIME_MIN_FLOW) {
-        return; // too slow to divide by, the grind says nothing about the dead time and it is left alone
+// What the switch-off of the last grind tells about the delay: the grounds that arrived after it,
+// divided by the flow at that moment. Corrects delayEnd towards it by DELAY_CORRECTION
+static void calibrateDelay(double finalDose) {
+    if (flowAtSwitchOff < DELAY_MIN_FLOW) {
+        return; // too slow to divide by, the grind says nothing about the delay and it is left alone
     }
-    double measured = constrain((finalDose - doseAtSwitchOff) / flowAtSwitchOff, DEAD_TIME_MIN, DEAD_TIME_MAX);
-    deadTimeMeasured = measured; // what this grind says, the finished screen shows it next to the rest
-    deadTimeEnd = constrain(deadTimeEnd + DEAD_TIME_CORRECTION * (measured - deadTimeEnd),
-                            DEAD_TIME_MIN, DEAD_TIME_MAX);
+    double measured = constrain((finalDose - doseAtSwitchOff) / flowAtSwitchOff, DELAY_MIN, DELAY_MAX);
+    delayMeasured = measured; // what this grind says, the finished screen shows it next to the rest
+    delayEnd = constrain(delayEnd + DELAY_CORRECTION * (measured - delayEnd),
+                            DELAY_MIN, DELAY_MAX);
 }
 
 // Switches to the failed state, which is left by pressing the knob. The grinder is only toggled where
@@ -724,7 +724,7 @@ static bool rawSteady(size_t readings, double tolerance, double &lowest, double 
 
 // Which of the two rules found the scale standing still, as the number of raw readings it looked at -
 // 0 if neither did. On top of the rule, at least that many readings have to have been taken after
-// `since` - for the dose, where everything from before the dead time says nothing; `since` of 0 asks
+// `since` - for the dose, where everything from before the delay says nothing; `since` of 0 asks
 // nothing of the kind. See config.hpp for the two rules
 static size_t steadyOver(unsigned long since) {
     double lowest = 0, highest = 0;
@@ -825,7 +825,7 @@ void scaleStatusLoop(void *p) {
                     grindLogBegin(); // from here on every reading of the load cell is logged
                     grindLogMark("microtare cup=%.2f was=%.3f", cupWeightEmpty, resting);
                     if (!scaleMode) {
-                        newDeadTime = true;
+                        newDelay = true;
                         startedGrindingAt = millis();
                     }
                     grindFlow = 0;
@@ -833,7 +833,7 @@ void scaleStatusLoop(void *p) {
                     doseAtSwitchOff = 0;
                     doseVerifiedFrom = 0;
                     confirmedDose = 0;
-                    deadTimeUsed = deadTimeMeasured = 0;
+                    delayUsed = delayMeasured = 0;
                     stopLineFromReading = stopLineAt = switchOffAt = 0;
                     stopLineDose = 0;
                     grinderToggle();
@@ -878,9 +878,9 @@ void scaleStatusLoop(void *p) {
                     stopLineFromReading = scaleLastUpdatedAt;
                     stopLineAt = millis();
                     grindState(stopLineAt, &stopLineDose, &grindFlow);
-                    // What the grinder will still deliver during its dead time is counted in. In scale
+                    // What the grinder will still deliver during its delay is counted in. In scale
                     // mode there is no grinder to switch off, so there the target is simply reached
-                    double lead = scaleMode ? 0 : grindFlow * deadTimeEnd;
+                    double lead = scaleMode ? 0 : grindFlow * delayEnd;
                     double missing = setWeight - stopLineDose - lead; // grams left before the switch-off
                     if (missing <= 0) {
                         switchOffAt = stopLineAt; // the moment has already passed, off at once
@@ -902,15 +902,15 @@ void scaleStatusLoop(void *p) {
                     finishedGrindingAt = millis();
                     flowAtSwitchOff = grindFlow;
                     // The line read off at the moment it is really switched off, which is what the
-                    // dead time is measured against once the dose has settled
+                    // delay is measured against once the dose has settled
                     doseAtSwitchOff = stopLineDose + grindFlow * (long)(finishedGrindingAt - stopLineAt) / 1000.0;
                     // The last grounds are still on their way; only from here on does a reading say
                     // anything about where the dose ends up
-                    verifyingFrom = finishedGrindingAt + (unsigned long)(scaleMode ? 0 : deadTimeEnd * 1000);
+                    verifyingFrom = finishedGrindingAt + (unsigned long)(scaleMode ? 0 : delayEnd * 1000);
                     grinderToggle(); // the grinder stops here, the dose is only confirmed in the next state
                     scaleStatus = STATUS_GRINDING_VERIFYING;
-                    grindLogMark("grinder_off w=%.2f dose=%.2f flow=%.2f dead=%.2f late=%ld", scaleWeight,
-                                 doseAtSwitchOff, grindFlow, deadTimeEnd,
+                    grindLogMark("grinder_off w=%.2f dose=%.2f flow=%.2f delay=%.2f late=%ld", scaleWeight,
+                                 doseAtSwitchOff, grindFlow, delayEnd,
                                  (long)(finishedGrindingAt - switchOffAt));
                     continue;
                 }
@@ -929,7 +929,7 @@ void scaleStatusLoop(void *p) {
                     grindLogEnd("unverified", "why=\"cup removed\"");
                     continue;
                 }
-                // The dead time first has to run out: until then the last grounds are still landing and
+                // The delay first has to run out: until then the last grounds are still landing and
                 // no reading says anything about where the dose ends up. Only from verifyingFrom on do
                 // they count
                 if (millis() < verifyingFrom) {
@@ -945,35 +945,35 @@ void scaleStatusLoop(void *p) {
                 bool plausible = ABS(dose - setWeight) <= DOSE_PLAUSIBLE_GRAMS;
                 if (!settled || !plausible) {
                     // Whatever is on the scale after FINISHED_MAX_WAIT is not a dose this grind can
-                    // answer for, so it is not counted and the dead time is not calibrated from it
+                    // answer for, so it is not counted and the delay is not calibrated from it
                     if (millis() - verifyingFrom > FINISHED_MAX_WAIT) {
                         failGrinding(settled ? "Dose off target" : "Scale unsteady", false);
                     }
                     break;
                 }
                 confirmedDose = dose; // what the dose is, from here on nothing changes it any more
-                double usedDeadTime = deadTimeEnd;
-                deadTimeUsed = usedDeadTime; // the grind ran with this one, the new one follows below
-                if (newDeadTime) {
-                    // What still arrived after the switch-off says how long the dead time really was;
+                double usedDelay = delayEnd;
+                delayUsed = usedDelay; // the grind ran with this one, the new one follows below
+                if (newDelay) {
+                    // What still arrived after the switch-off says how long the delay really was;
                     // only a part of the deviation goes into it, see config.hpp
-                    calibrateDeadTime(dose);
+                    calibrateDelay(dose);
                     shotCount++;
                     addGrindRecord(shotCount, (finishedGrindingAt - startedGrindingAt) / 1000.0,
-                                   usedDeadTime, flowAtSwitchOff, setWeight, dose);
+                                   usedDelay, flowAtSwitchOff, setWeight, dose);
                     preferences.begin("scale", false);
-                    preferences.putDouble("deadtime", deadTimeEnd);
+                    preferences.putDouble("deadtime", delayEnd);
                     preferences.putUInt("shotCount", shotCount);
                     preferences.putBytes("grindHist", grindHistory, sizeof(grindHistory));
                     preferences.putInt("grindHistN", grindHistoryCount);
                     preferences.end();
-                    newDeadTime = false;
+                    newDelay = false;
                 }
                 // A second of readings is still logged after this, so the log also shows
                 // how the scale settles once the dose is confirmed
-                grindLogEnd("finished", "dose=%.2f dur=%.2f flow=%.2f dead=%.2f next_dead=%.2f", dose,
+                grindLogEnd("finished", "dose=%.2f dur=%.2f flow=%.2f delay=%.2f next_delay=%.2f", dose,
                             (finishedGrindingAt - startedGrindingAt) / 1000.0, flowAtSwitchOff,
-                            usedDeadTime, deadTimeEnd);
+                            usedDelay, delayEnd);
                 // The readings of the accepted window are the first ones that say what the dose is,
                 // the finished screen averages from there on
                 doseVerifiedFrom = (unsigned long)rawData.timestampOfLast(settledOver);
@@ -1015,7 +1015,8 @@ void setupScale() {
     preferences.begin("scale", false);
     scaleFactor = preferences.getDouble("calibration", (double)LOADCELL_SCALE_FACTOR);
     setWeight = preferences.getDouble("setWeight", (double)COFFEE_DOSE_WEIGHT);
-    deadTimeEnd = constrain(preferences.getDouble("deadtime", (double)DEAD_TIME_END_DEFAULT), DEAD_TIME_MIN, DEAD_TIME_MAX);
+    // The stored name stays "deadtime": a scale that has already calibrated keeps its value
+    delayEnd = constrain(preferences.getDouble("deadtime", (double)DELAY_END_DEFAULT), DELAY_MIN, DELAY_MAX);
     setCupWeight = preferences.getDouble("cup", (double)CUP_WEIGHT);
     setCupWeight2 = preferences.getDouble("cup2", (double)CUP_WEIGHT_2);
     scaleMode = preferences.getBool("scaleMode", false);

@@ -42,8 +42,8 @@ Commands are separated by new lines or `;`, `#` starts a comment. A line `[name]
 | `hold <ms>` | holds the button down |
 | `press`, `release` | presses or releases the button without time passing, for frame exact input |
 | `weight <grams>` | reading of the scale |
-| `set <variable> <value>` | sets a firmware variable: `scaleStatus`, `currentSetting`, `currentMenuItem`, `setWeight`, `deadTimeEnd`, `grindFlow`, `cupWeightEmpty`, `setCupWeight`, `setCupWeight2`, `scaleFactor`, `shotCount`, `sleepTime`, `scaleReady`, `scaleMode`, `grindMode`, `debugMode`, `grindFailReason`, `grindTime` (seconds since grinding started), `verifiedAgo` (seconds since the readings count towards the confirmed dose), `confirmedDose`, `flowAtSwitchOff`, `deadTimeUsed`, `deadTimeMeasured` |
-| `grind <shot> <seconds> <dead time> <flow> <target> <actual>` | adds a grind to the Weight History |
+| `set <variable> <value>` | sets a firmware variable: `scaleStatus`, `currentSetting`, `currentMenuItem`, `setWeight`, `delayEnd`, `grindFlow`, `cupWeightEmpty`, `setCupWeight`, `setCupWeight2`, `scaleFactor`, `shotCount`, `sleepTime`, `scaleReady`, `scaleMode`, `grindMode`, `debugMode`, `grindFailReason`, `grindTime` (seconds since grinding started), `verifiedAgo` (seconds since the readings count towards the confirmed dose), `confirmedDose`, `flowAtSwitchOff`, `delayUsed`, `delayMeasured` |
+| `grind <shot> <seconds> <delay> <flow> <target> <actual>` | adds a grind to the Weight History |
 | `boot <ms>` | shows the boot screen for this long (the scale reports no reading yet) |
 | `draw` | one more display update without time passing |
 | `shot <name>` | saves the display as `<name>.png` |

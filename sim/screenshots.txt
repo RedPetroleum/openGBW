@@ -37,9 +37,9 @@ set cupWeightEmpty 396.1; set grindTime 7.9; set shotCount 327
 weight 413.50; wait 400; weight 413.56; wait 400; weight 413.53; wait 400
 set verifiedAgo 1.2; set scaleStatus 2; draw; shot grinding-finished # 0.07 g under the target
 set confirmedDose 17.43; set flowAtSwitchOff 2.21
-set deadTimeUsed 0.28; set deadTimeMeasured 0.34; set deadTimeEnd 0.30
+set delayUsed 0.28; set delayMeasured 0.34; set delayEnd 0.30
 turn 1; draw; shot grinding-finished-details # the knob pages to the details of the grind
-turn 1; draw; shot grinding-finished-deadtime # ... and on to the dead time
+turn 1; draw; shot grinding-finished-delay # ... and on to the delay
 
 [grinding finished, off target]
 set cupWeightEmpty 396.1; set grindTime 7.9
@@ -73,7 +73,7 @@ draw; shot grinding-curve
 click; shot menu
 turn 1; click; shot cup-weight-1
 turn 1; turn 2; click; weight 3.2; wait 200; shot scale-factor
-click; turn 1; click; shot dead-time
+click; turn 1; click; shot delay
 click; turn 1; click; shot scale-mode
 click; turn 1; click; shot grinding-mode
 click; turn 1; click; shot info

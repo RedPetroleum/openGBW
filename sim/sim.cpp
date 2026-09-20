@@ -72,7 +72,7 @@ TaskHandle_t ScaleTask = nullptr;
 TaskHandle_t ScaleStatusTask = nullptr;
 volatile bool displayLock = false;
 
-void addGrindRecord(uint32_t shot, float duration, float deadTime, float flow, float target,
+void addGrindRecord(uint32_t shot, float duration, float grinderDelay, float flow, float target,
                     float actual); // scale.cpp
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -210,8 +210,8 @@ static bool setVariable(const std::string &name, const std::string &text, int li
     scaleWeight = shownWeight = value; // the filter does not run here, the display reads shownWeight
   else if (name == "setWeight")
     setWeight = value;
-  else if (name == "deadTimeEnd")
-    deadTimeEnd = value;
+  else if (name == "delayEnd")
+    delayEnd = value;
   else if (name == "grindFlow")
     grindFlow = value;
   else if (name == "cupWeightEmpty")
@@ -244,10 +244,10 @@ static bool setVariable(const std::string &name, const std::string &text, int li
     currentSetting = value;
   else if (name == "currentMenuItem")
     currentMenuItem = value;
-  else if (name == "deadTimeUsed")
-    deadTimeUsed = value;
-  else if (name == "deadTimeMeasured")
-    deadTimeMeasured = value;
+  else if (name == "delayUsed")
+    delayUsed = value;
+  else if (name == "delayMeasured")
+    delayMeasured = value;
   else if (name == "confirmedDose")
     confirmedDose = value;
   else if (name == "flowAtSwitchOff")
@@ -337,13 +337,13 @@ static bool execute(const std::vector<std::string> &words, int line)
   }
   else if (command == "grind")
   {
-    // grind <shot> <seconds> <dead time> <flow> <target> <actual>: adds an entry to the Weight History
-    double shot, duration, deadTime, flow, target, actual;
+    // grind <shot> <seconds> <delay> <flow> <target> <actual>: adds an entry to the Weight History
+    double shot, duration, grinderDelay, flow, target, actual;
     if (words.size() != 7 || !parseNumber(words[1], shot) || !parseNumber(words[2], duration) ||
-        !parseNumber(words[3], deadTime) || !parseNumber(words[4], flow) ||
+        !parseNumber(words[3], grinderDelay) || !parseNumber(words[4], flow) ||
         !parseNumber(words[5], target) || !parseNumber(words[6], actual))
-      return fail(line, "usage: grind <shot> <seconds> <dead time> <flow> <target> <actual>");
-    addGrindRecord(shot, duration, deadTime, flow, target, actual);
+      return fail(line, "usage: grind <shot> <seconds> <delay> <flow> <target> <actual>");
+    addGrindRecord(shot, duration, grinderDelay, flow, target, actual);
   }
   else if (command == "boot")
   {
@@ -465,7 +465,7 @@ static void usage()
           "  -v         print the serial output of the firmware\n"
           "  -f script  run the commands of a script file\n"
           "commands (separate with \";\"): wait <ms>, turn <detents>, click, hold <ms>, press, release, weight <grams>,\n"
-          "  set <variable> <value>, grind <shot> <seconds> <dead> <flow> <target> <actual>, draw, shot <name>\n");
+          "  set <variable> <value>, grind <shot> <seconds> <delay> <flow> <target> <actual>, draw, shot <name>\n");
 }
 
 int main(int argc, char **argv)

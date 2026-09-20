@@ -139,10 +139,10 @@ void grindLogSample(long raw, double grams)
         double cupSet = ABS(cupWeightEmpty - setCupWeight) <= ABS(cupWeightEmpty - setCupWeight2) ? setCupWeight : setCupWeight2;
         // shotCount is only counted up once the dose is verified, so the grind that is starting here
         // is the next one; that is also the number it gets in the Weight History
-        Serial.printf("GBW>begin v=%d kind=%s t=%lu shot=%u cup_set=%.2f cup_empty=%.2f target=%.2f dead=%.2f "
+        Serial.printf("GBW>begin v=%d kind=%s t=%lu shot=%u cup_set=%.2f cup_empty=%.2f target=%.2f delay=%.2f "
                       "sf=%.3f tare=%ld bundle=%d mode=%s grinder=%s\n",
                       GRIND_LOG_VERSION, logManual ? "manual" : "grind", logStartedAt, shotCount + 1,
-                      cupSet, cupWeightEmpty, setWeight, deadTimeEnd,
+                      cupSet, cupWeightEmpty, setWeight, delayEnd,
                       (double)loadcell.get_scale(), loadcell.get_offset(), SCALE_READINGS_PER_UPDATE,
                       scaleMode ? "timer" : "weight", grindMode ? "continuous" : "impulse");
         Serial.println("GBW>cols t_ms raw g");
