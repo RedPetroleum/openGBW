@@ -136,6 +136,7 @@ static bool saveScreenshot(const std::string &path, int scale)
 #define SIM_SCALE_READING_MS 100 // interval of new scale readings
 #define SIM_CLICK_MS 60         // how long a click holds the button down
 #define SIM_CLICK_PAUSE_MS 600  // pause after a click outside of games, rapid clicks would toggle the debug mode
+#define SIM_BOOT_MS 3100        // a little longer than BOOT_READY_MS of display.cpp, the initializing screen
 
 static std::string outputDir = "sim/screenshots";
 static int pixelScale = 4;
@@ -430,6 +431,13 @@ static void parseScript(const std::string &text, std::vector<std::vector<ScriptL
 static bool runSection(const std::vector<ScriptLine> &lines)
 {
   setup();
+  // The initializing screen stays up for BOOT_READY_MS whatever the scale reports, so a section that
+  // does not ask for it with "boot" waits it out first - otherwise every shot would show the cup
+  bool showsBoot = false;
+  for (const ScriptLine &line : lines)
+    showsBoot = showsBoot || (!line.words.empty() && line.words[0] == "boot");
+  if (!showsBoot)
+    run(SIM_BOOT_MS);
   for (const ScriptLine &line : lines)
   {
     if (!execute(line.words, line.number))

@@ -32,7 +32,7 @@ sim/build/opengbw-sim "click; turn 7; click; shot info"
 
 ## Commands
 
-Commands are separated by new lines or `;`, `#` starts a comment. A line `[name]` starts a section: every section runs from a freshly started firmware with its default settings.
+Commands are separated by new lines or `;`, `#` starts a comment. A line `[name]` starts a section: every section runs from a freshly started firmware with its default settings. A section that does not use `boot` skips the initializing screen: it waits until the firmware has left it.
 
 | Command | Effect |
 | --- | --- |
