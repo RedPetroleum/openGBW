@@ -745,18 +745,20 @@ static float grindProgressShown = 0;  // Progress as drawn, follows the reading 
 static unsigned long grindProgressDrawnAt = 0; // Time of the last progress update
 
 // Shows how much of the set weight is in the cup by inverting the screen from the bottom up. The
-// reading only arrives twice a second, so the inverted part grows smoothly instead of jumping. It
-// never covers the whole screen: the grinder stops before the set weight and the dose counts as
-// reached only once the reading has settled, which is the next screen. Has to be called last, it
-// inverts everything that has been drawn before.
-static void invertGrindProgress(float progress)
+// reading only arrives twice a second, so the inverted part grows smoothly instead of jumping. While
+// grinding it stays one row short of the top: the grinder stops before the set weight. Once the
+// grinder is off and only the reading still has to settle, it runs up to the top. Has to be called
+// last, it inverts everything that has been drawn before.
+static void invertGrindProgress(float progress, bool complete)
 {
   unsigned long now = millis();
   float dt = min((now - grindProgressDrawnAt) / 1000.0f, 0.1f);
   grindProgressDrawnAt = now;
-  grindProgressShown += (progress - grindProgressShown) * min(1.0f, dt * GRIND_PROGRESS_EASING);
+  grindProgressShown += ((complete ? 1.0f : progress) - grindProgressShown) * min(1.0f, dt * GRIND_PROGRESS_EASING);
 
-  int rows = constrain((int)(grindProgressShown * GRIND_PROGRESS_HEIGHT), 0, GRIND_PROGRESS_HEIGHT - 1); // always one row short
+  // The easing only approaches the target, so the last rows are rounded up to reach the top
+  int rows = (int)ceilf(grindProgressShown * GRIND_PROGRESS_HEIGHT);
+  rows = constrain(rows, 0, complete ? GRIND_PROGRESS_HEIGHT : GRIND_PROGRESS_HEIGHT - 1);
   if (rows > 0)
   {
     screen.setDrawColor(2); // XOR: lit pixels go dark and the background lights up
@@ -830,7 +832,7 @@ void refreshDisplay()
       snprintf(buf, sizeof(buf), "%3.1fs", grindSeconds);
       CenterPrintToScreen(buf, 64);
 
-      invertGrindProgress(setWeight > 0 ? (shownWeight - cupWeightEmpty) / setWeight : 0);
+      invertGrindProgress(setWeight > 0 ? (shownWeight - cupWeightEmpty) / setWeight : 0, verifying);
     }
     else if (scaleStatus == STATUS_EMPTY)
     {
