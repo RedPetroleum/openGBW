@@ -53,6 +53,7 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define BOOT_CAMERA 6.0f        // distance of the camera, gives the model its perspective
 #define BOOT_ZOOM 150.0f        // model units to pixels
 #define BOOT_CENTER_Y 26        // row the model is drawn around, the bar takes the lower rows
+#define BOOT_CENTER_Y_FRAME 34  // without the bar under it the cup sits lower, in the middle of the frame
 #define BOOT_RING_SEGMENTS 20   // corners of a circle of the model
 #define BOOT_CUP_TOP 0.62f      // the cup sits between these heights ...
 #define BOOT_CUP_BOTTOM -0.42f
@@ -782,7 +783,7 @@ static void bootProject(float x, float y, float z, float turn, int &screenX, int
   float tiltedZ = y * sin(BOOT_TILT) + turnedZ * cos(BOOT_TILT);
   float scale = BOOT_ZOOM / (BOOT_CAMERA - tiltedZ);
   screenX = 64 + toPixel(turnedX * scale);
-  screenY = BOOT_CENTER_Y - toPixel(tiltedY * scale);
+  screenY = (bootScreenStyle == BOOT_STYLE_FRAME ? BOOT_CENTER_Y_FRAME : BOOT_CENTER_Y) - toPixel(tiltedY * scale);
 }
 
 // Draws a circle of the model lying flat at the given height
