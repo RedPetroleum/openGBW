@@ -55,6 +55,8 @@ unsigned long verifyingFrom = 0; // from when readings count towards the dose, s
 unsigned long doseVerifiedFrom = 0;
 double confirmedDose = 0; // g, the dose the grind was confirmed with, the one the dead time is
                           // calibrated from; it stands still while the screen shows it
+double deadTimeUsed = 0;     // s, the dead time the last grind was stopped with ...
+double deadTimeMeasured = 0; // ... and the one its dose says it really was, 0 where it says nothing
 const char *grindFailReason = ""; // Why the last grind was aborted, shown on the display
 
 // Tares the scale (sets the current weight to zero). A tare is wanted while lastTareAt is zero, and
@@ -690,6 +692,7 @@ static void calibrateDeadTime(double finalDose) {
         return; // too slow to divide by, the grind says nothing about the dead time and it is left alone
     }
     double measured = constrain((finalDose - doseAtSwitchOff) / flowAtSwitchOff, DEAD_TIME_MIN, DEAD_TIME_MAX);
+    deadTimeMeasured = measured; // what this grind says, the finished screen shows it next to the rest
     deadTimeEnd = constrain(deadTimeEnd + DEAD_TIME_CORRECTION * (measured - deadTimeEnd),
                             DEAD_TIME_MIN, DEAD_TIME_MAX);
 }
@@ -830,6 +833,7 @@ void scaleStatusLoop(void *p) {
                     doseAtSwitchOff = 0;
                     doseVerifiedFrom = 0;
                     confirmedDose = 0;
+                    deadTimeUsed = deadTimeMeasured = 0;
                     stopLineFromReading = stopLineAt = switchOffAt = 0;
                     stopLineDose = 0;
                     grinderToggle();
@@ -949,6 +953,7 @@ void scaleStatusLoop(void *p) {
                 }
                 confirmedDose = dose; // what the dose is, from here on nothing changes it any more
                 double usedDeadTime = deadTimeEnd;
+                deadTimeUsed = usedDeadTime; // the grind ran with this one, the new one follows below
                 if (newDeadTime) {
                     // What still arrived after the switch-off says how long the dead time really was;
                     // only a part of the deviation goes into it, see config.hpp

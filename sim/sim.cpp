@@ -244,6 +244,10 @@ static bool setVariable(const std::string &name, const std::string &text, int li
     currentSetting = value;
   else if (name == "currentMenuItem")
     currentMenuItem = value;
+  else if (name == "deadTimeUsed")
+    deadTimeUsed = value;
+  else if (name == "deadTimeMeasured")
+    deadTimeMeasured = value;
   else if (name == "confirmedDose")
     confirmedDose = value;
   else if (name == "flowAtSwitchOff")

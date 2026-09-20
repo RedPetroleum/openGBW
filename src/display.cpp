@@ -106,7 +106,7 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define DEVIATION_SIGN_GAP 3      // pixels between the sign and the first digit
 
 // Second page of the finished screen: what the grind itself was, as four rows of label and value
-#define FINISHED_PAGES 2          // the deviation and the details, the knob pages between them
+#define FINISHED_PAGES 3          // deviation, details and dead time, the knob pages between them
 #define FINISHED_DETAIL_ROWS 4
 #define FINISHED_DETAIL_TOP 3     // first row of the topmost line ...
 #define FINISHED_DETAIL_STEP 15   // ... and the distance to the next one
@@ -1137,6 +1137,39 @@ static void drawGrindDetails()
   }
 }
 
+// The third page: the dead time of the grinder, the time it keeps delivering after the switch-off.
+// The grind ran with one, its dose says what it really was, and the next grind is stopped with the
+// value the two make together (see DEAD_TIME_CORRECTION in config.hpp)
+static void drawDeadTimeDetails()
+{
+  const char *labels[FINISHED_DETAIL_ROWS] = {"Dead time", "Used", "Measured", "Next"};
+  char values[FINISHED_DETAIL_ROWS][16];
+  values[0][0] = 0; // the first row is the heading of the page
+  snprintf(values[1], sizeof(values[1]), "%.2f s", deadTimeUsed);
+  if (deadTimeMeasured > 0)
+  {
+    snprintf(values[2], sizeof(values[2]), "%.2f s", deadTimeMeasured);
+  }
+  else
+  {
+    strcpy(values[2], "-"); // too little flow at the switch-off to measure it
+  }
+  snprintf(values[3], sizeof(values[3]), "%.2f s", deadTimeEnd);
+
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_7x13_tr);
+  for (int row = 1; row < FINISHED_DETAIL_ROWS; row++)
+  {
+    LeftPrintToScreen(labels[row], FINISHED_DETAIL_TOP + row * FINISHED_DETAIL_STEP);
+  }
+  screen.setFont(u8g2_font_7x14B_tf);
+  CenterPrintToScreen(labels[0], FINISHED_DETAIL_TOP);
+  for (int row = 1; row < FINISHED_DETAIL_ROWS; row++)
+  {
+    RightPrintToScreen(values[row], FINISHED_DETAIL_TOP + row * FINISHED_DETAIL_STEP);
+  }
+}
+
 // The grind as a curve: how the weight in the cup grew over the whole grind, with the set weight as a
 // dashed line and the moment the grinder was switched off marked in it. The readings are recorded while
 // grinding and drawn stretched over the width, so the curve always spans the whole grind - it only gets
@@ -1388,9 +1421,13 @@ void refreshDisplay()
       CenterPrintToScreen("Press knob", 36);
       CenterPrintToScreen("to reset", 50);
     }
-    else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage > 0)
+    else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 1)
     {
       drawGrindDetails();
+    }
+    else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 2)
+    {
+      drawDeadTimeDetails();
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED)
     {
