@@ -97,16 +97,32 @@ turn 1; click; shot calibrate-menu # the settings of a scale and a grinder live 
 turn 1; click; shot cup-weight-1
 turn 1; turn 2; click; weight 3.2; wait 200; shot scale-factor
 click; turn 1; click; shot delay # saving returns to the Calibrate menu, leave it over its own Exit
-click; turn 1; click # Delay -> Exit of the Calibrate menu -> back in the main menu
+click; turn 2; click # Delay -> past Noise to the Exit of the Calibrate menu -> back in the main menu
 turn 1; click; shot scale-mode
 click; turn 1; click; shot grinding-mode
 click; turn 1; click; shot info
+turn 1; shot info-2 # more lines than fit on a page, turning shows the next of them
+turn 1 # back on the first page
 click; turn 1; click; shot style-menu # the Sleep Timer is hidden, see SLEEP_TIMER_MENU
 turn 1; click; shot grinding-screen # the style of the grinding screen: bar, inverted or frame
 click; turn -1; click # saving returns to the Style menu, leave it over its own Exit
 turn 1; click; shot reset
 click; turn 1; click; shot games-menu
 click; turn 1; click; shot debug-menu
+
+# The noise measurement of the Calibrate submenu: the raw readings of the resting scale drawn as the
+# distribution of their distance from their own average. "noise" gives the simulated scale the scatter
+# a real load cell has, otherwise every reading would be the same number
+[noise measurement]
+noise 0.065
+click; turn 1; click; turn 5; click # menu -> Calibrate -> Noise, the click starts the bar
+wait 2000; shot noise-early # the first readings, the scale of the drawing is still finding itself
+wait 8000; shot noise-half  # the bell fills up while the bar above it runs out
+wait 11000; shot noise      # the bar is gone, the sigma stands in its place and collecting goes on
+wait 15000; shot noise-long # left standing longer, the bell only gets smoother
+click; shot noise-save      # a click or a turn asks what to do with the sigma
+turn 1; shot noise-discard  # turning switches between the two
+turn 1; click # back on Save and taken, the sigma stands in the Info Menu from here on
 
 [debug menu]
 grind 305 8.1 0.28 2.1 17.5 17.4; grind 306 7.8 0.34 2.3 17.5 17.8; grind 307 8.4 0.31 2.0 17.5 17.5

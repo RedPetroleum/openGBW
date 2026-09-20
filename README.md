@@ -90,7 +90,7 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 | Calibrate | everything that is set once for a scale and a grinder, see below |
 | Scale Mode | GBW (default) or scale only (no grinder control, timer starts when the weight increases) |
 | Grinding Mode | continuous (relay stays closed while grinding) or impulse (short pulse to start and stop) |
-| Info Menu | cup weights, delay, scale factor and shot count |
+| Info Menu | cup weights, delay, scale factor, shot count and the measured noise of the scale, turn to page through them |
 | Reset | restore all settings to their defaults |
 | Games | see below |
 
@@ -104,6 +104,7 @@ The display turns off after `SLEEP_AFTER_MS` without activity; tapping the scale
 | Cup Weight 1 / Cup Weight 2 | place the empty cup and press to save its weight, turn to leave without saving |
 | Scale Factor | turn to change the calibration factor while watching the live weight, press to save |
 | Delay | how long the grinder keeps delivering after it was switched off, between 0 and 2s. The grinder stops as soon as the weight still to come carries the dose over the target, so this is what decides the dose. After every grind 40% of the deviation is corrected automatically, so it settles on the right value within a few grinds |
+| Noise | how much a single reading of this scale scatters. Leave the scale alone and it collects its raw readings into the distribution of their distance from their own average - a bell that fills up while a bar runs out above it, which takes 20 seconds. When the bar is full it goes and the sigma takes its place; collecting carries on and the bell only gets smoother the longer it stands. Pressing or turning then asks whether to save the sigma or discard it, and a saved one stands in the Info Menu. Pressing or turning while the bar is still running gives the measurement up |
 | Debug Menu | only visible in debug mode, toggled by pressing the knob four times quickly |
 
 #### Debug Menu

@@ -34,6 +34,39 @@ void exitToMenu()
 }
 
 bool debugMode = DEBUG_MODE;
+
+// Leaving the Noise screen, by a click or by a turn alike. While its bar is still running there is
+// nothing worth keeping, so the measurement is given up and the Calibrate submenu it was opened from
+// is back at once; once the bar has run out the same click or turn asks what to do with its sigma
+static void leaveNoiseMeasurement()
+{
+    if (noiseMeasurementReady())
+    {
+        resetNoiseSave();
+        currentSetting = NOISE_SAVE_SETTING;
+    }
+    else
+    {
+        currentSetting = CALIBRATE_MENU_SETTING;
+    }
+}
+
+// The answer to that question
+static void answerNoiseSave()
+{
+    if (noiseSaveSelected())
+    {
+        noiseSigma = noiseMeasuredSigma();
+        preferences.begin("scale", false);
+        preferences.putDouble("noise", noiseSigma);
+        preferences.end();
+        char measured[32];
+        snprintf(measured, sizeof(measured), "Noise sigma: %.4f g", noiseSigma);
+        Serial.println(measured);
+    }
+    currentSetting = CALIBRATE_MENU_SETTING;
+}
+
 // Handles button clicks on the rotary encoder
 
 void rotary_onButtonClick()
@@ -110,6 +143,7 @@ void rotary_onButtonClick()
         case MENU_INFO:
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 5;
+            resetInfoMenu(); // always on the first page
             Serial.println("Info Menu");
             break;
         case MENU_SLEEP_TIMER:
@@ -329,6 +363,16 @@ void rotary_onButtonClick()
             currentSetting = STYLE_MENU_SETTING; // Back to the Style Menu
             break;
         }
+        case NOISE_SETTING: // Noise measurement
+        {
+            leaveNoiseMeasurement();
+            break;
+        }
+        case NOISE_SAVE_SETTING: // Keep the measured sigma or throw it away
+        {
+            answerNoiseSave();
+            break;
+        }
         case WEIGHT_DATA_SETTING: // Weight Data view
         case GRIND_HISTORY_SETTING: // Weight History view
         {
@@ -400,9 +444,24 @@ void rotary_loop()
                 encoderValue = newValue;
                 currentSetting = CALIBRATE_MENU_SETTING; // back to the menu it was opened from
             }
+            else if (currentSetting == NOISE_SETTING)
+            { // Noise screen: turning leaves it, just like clicking does
+                encoderValue = newValue;
+                leaveNoiseMeasurement();
+            }
+            else if (currentSetting == NOISE_SAVE_SETTING)
+            { // Save or Discard, turning switches between the two
+                noiseSaveOnTurn((newValue - encoderValue) * -encoderDir);
+                encoderValue = newValue;
+            }
             else if (currentSetting == CALIBRATE_MENU_SETTING)
             { // Calibrate Menu
                 calibrateMenuOnTurn((newValue - encoderValue) * -encoderDir);
+                encoderValue = newValue;
+            }
+            else if (currentSetting == 5)
+            { // Info Menu: more lines than fit on one page, turning shows the next of them
+                infoMenuOnTurn((newValue - encoderValue) * -encoderDir);
                 encoderValue = newValue;
             }
             else if (currentSetting == GAMES_MENU_SETTING)

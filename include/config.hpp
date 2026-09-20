@@ -59,6 +59,30 @@ struct GrindRecord
 #define MENU_DEBUG 9
 
 #define CALIBRATE_MENU_SETTING 18 // currentSetting while the Calibrate submenu is shown
+#define NOISE_SETTING 19 // currentSetting while the noise measurement is shown
+#define NOISE_SAVE_SETTING 20 // ... and while it asks whether to keep what it measured
+
+// The noise measurement, the last entry of the Calibrate submenu. For NOISE_DURATION_MS the raw
+// readings of the resting scale are collected and drawn as the distribution of their distance from
+// their own average: how often a reading landed that far off. What grows out of it is the bell a load
+// cell scatters by, and its sigma says what a single reading of this scale is worth - the same number
+// VERIFY_NOISE_SIGMA holds as a fixed assumption, but measured on this scale instead of read off the
+// recordings of another one. For the first NOISE_DURATION_MS a bar stands where the sigma will: that
+// many readings have to be in before a sigma says anything. After it the measurement carries on and
+// only gets better, until it is left. Every reading is kept, so the average, the sigma and the whole
+// distribution are worked out from all of them again for every new one: the bell fills up while its
+// middle stays where it belongs, and a slow drift of the zero point moves the middle instead of
+// smearing the bell
+#define NOISE_DURATION_MS 20000 // how long the bar takes to fill; the measurement carries on after it
+#define NOISE_RATE_HZ 10        // readings a second it expects, what the HX711 delivers
+#define NOISE_SAMPLES 1024      // readings it can hold, those twenty seconds five times over
+#define NOISE_BINS 31           // columns of the distribution, an odd number so one sits in the middle
+#define NOISE_BIN_PIXELS 4      // pixels per column, the last of them is the gap to the next
+#define NOISE_RANGE_SIGMAS 3.5f // the columns reach this far to either side of the average
+#define NOISE_SETTLE_SAMPLES 30 // readings the width of a column follows the sigma for; after them it
+                                // stands still, so the bell grows instead of being redrawn at a new
+                                // scale with every reading, and only a reading that would fall off
+                                // the edge widens it again
 
 // Whether the Sleep Timer stands in the menu. The timer itself runs either way and is set in
 // SLEEP_AFTER_MS; only the entry that changes it is hidden, and only this line brings it back
@@ -357,6 +381,7 @@ extern double setCupWeight;
 extern const char *grindFailReason;
 extern double setCupWeight2;
 extern double scaleFactor;
+extern double noiseSigma; // g, the scatter of the resting scale, 0 until it was measured once
 extern MenuItem menuItems[];
 extern int currentMenuItem;
 extern int currentSetting;

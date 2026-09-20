@@ -141,6 +141,20 @@ static bool saveScreenshot(const std::string &path, int scale)
 static std::string outputDir = "sim/screenshots";
 static int pixelScale = 4;
 static unsigned long lastReadingAt = 0;
+static double readingNoise = 0; // g, the scatter "noise" adds to every raw reading
+
+// A reading of the load cell: the weight of the script, with the scatter of a real scale on it where
+// the script asked for one. Only the raw readings carry it - the simulator runs no filter, so the
+// weight the screens show stays the clean one the script set
+static double reading()
+{
+  if (readingNoise <= 0)
+    return scaleWeight;
+  // Box-Muller, two uniform numbers into one normally distributed one
+  double first = (rand() + 1.0) / ((double)RAND_MAX + 2.0);
+  double second = (rand() + 1.0) / ((double)RAND_MAX + 2.0);
+  return scaleWeight + readingNoise * sqrt(-2 * log(first)) * cos(2 * M_PI * second);
+}
 
 // One pass of the display task, with the knob polled and the scale read like the firmware tasks do
 static void step()
@@ -152,9 +166,11 @@ static void step()
     simTime += SIM_FRAME_MS;
   if (simTime - lastReadingAt >= SIM_SCALE_READING_MS)
   {
+    double raw = reading();
     weightData.push(scaleWeight);
-    rawData.push(scaleWeight); // no filter in the simulator, both buffers get the same value
-    recordSwitchOffReading(scaleWeight); // like the sampler of the firmware does with every reading
+    rawData.push(raw); // no filter in the simulator, the raw buffer only differs by the added noise
+    recordSwitchOffReading(raw); // like the sampler of the firmware does with every reading
+    noiseSample(raw);
     scaleLastUpdatedAt = simTime;
     lastReadingAt = simTime;
   }
@@ -223,6 +239,8 @@ static bool setVariable(const std::string &name, const std::string &text, int li
     setCupWeight2 = value;
   else if (name == "scaleFactor")
     scaleFactor = value;
+  else if (name == "noiseSigma")
+    noiseSigma = value;
   else if (name == "shotCount")
     shotCount = value;
   else if (name == "sleepTime")
@@ -328,6 +346,13 @@ static bool execute(const std::vector<std::string> &words, int line)
     if (!numberArgument(1))
       return fail(line, "usage: weight <grams>");
     scaleWeight = shownWeight = value;
+  }
+  else if (command == "noise")
+  {
+    // Scatter added to every raw reading from here on, what a real load cell does, 0 turns it off
+    if (!numberArgument(1))
+      return fail(line, "usage: noise <sigma in grams>");
+    readingNoise = value;
   }
   else if (command == "set")
   {
@@ -468,6 +493,7 @@ static void usage()
           "  -v         print the serial output of the firmware\n"
           "  -f script  run the commands of a script file\n"
           "commands (separate with \";\"): wait <ms>, turn <detents>, click, hold <ms>, press, release, weight <grams>,\n"
+          "  noise <sigma>,\n"
           "  set <variable> <value>, grind <shot> <seconds> <delay> <flow> <target> <actual>, draw, shot <name>\n");
 }
 

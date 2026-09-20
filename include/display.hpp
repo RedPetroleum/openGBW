@@ -27,3 +27,14 @@ void calibrateMenuOnTurn(int steps); // Moves the selection in it
 void calibrateMenuOnClick();         // Opens the selected setting or returns to the main menu
 void finishedScreenOnTurn(int steps); // Pages between the two pages of the finished screen
 void recordSwitchOffReading(double grams); // one raw reading for the picture of the switch-off
+void infoMenuOnTurn(int steps);       // Pages through the lines of the Info Menu
+void resetInfoMenu();                 // ... which always opens on the first of them
+void showNoiseScreen();               // Draws the noise measurement of the Calibrate submenu
+void startNoiseMeasurement();         // Starts its twenty seconds over
+void noiseSample(double grams);       // one raw reading for it, called for every single one
+bool noiseMeasurementReady();         // whether its bar has run out, from when its sigma counts ...
+double noiseMeasuredSigma();          // ... and the scatter it has found so far
+void showNoiseSaveScreen();           // Asks whether to keep that sigma
+void noiseSaveOnTurn(int steps);      // ... turning switches between the two answers ...
+void resetNoiseSave();                // ... which always opens on Save ...
+bool noiseSaveSelected();             // ... and this is the one standing when it is clicked

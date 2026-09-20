@@ -173,10 +173,12 @@ MenuItem debugMenuItems[5] = {
     {4, false, "Zero Shot Count", 0}
 };
 
+void startNoiseMeasurement(); // stands with the rest of the noise measurement further down
+
 int currentCalibrateMenuItem = 0; // Current selection in the Calibrate submenu
-static const char *calibrateMenuItems[] = {"Exit", "Cup Weight 1", "Cup Weight 2", "Scale Factor", "Delay"};
+static const char *calibrateMenuItems[] = {"Exit", "Cup Weight 1", "Cup Weight 2", "Scale Factor", "Delay", "Noise"};
 static const int calibrateMenuItemsCount = sizeof(calibrateMenuItems) / sizeof(calibrateMenuItems[0]);
-static const int calibrateMenuSettings[] = {-1, 0, 11, 10, 2}; // what each of them opens
+static const int calibrateMenuSettings[] = {-1, 0, 11, 10, 2, NOISE_SETTING}; // what each of them opens
 
 int currentStyleMenuItem = 0; // Current selection in the Style submenu
 static const char *styleMenuItems[] = {"Exit", "Grinding Screen", "Initializing"}; // at most three, they are shown at once
@@ -216,6 +218,10 @@ void calibrateMenuOnClick()
         return;
     }
     currentSetting = calibrateMenuSettings[currentCalibrateMenuItem];
+    if (currentSetting == NOISE_SETTING)
+    {
+        startNoiseMeasurement(); // the twenty seconds start with this click
+    }
     Serial.print("Calibrate: ");
     Serial.println(calibrateMenuItems[currentCalibrateMenuItem]);
 }
@@ -669,38 +675,342 @@ void showResetMenu()
   screen.sendBuffer(); // Send the buffer to the display
 }
 
-void showInfoMenu() {
-    char buf[32];
+// What the scale has been calibrated to, one line per number, in the same size the menus are written
+// in: more than INFO_LINES_PER_PAGE of them do not fit under the title at that size, so the knob turns
+// the pages instead of the writing getting smaller
+#define INFO_LINES 5          // numbers it shows in all ...
+#define INFO_LINES_PER_PAGE 3 // ... and how many of them stand on one page
+#define INFO_PAGES ((INFO_LINES + INFO_LINES_PER_PAGE - 1) / INFO_LINES_PER_PAGE)
+#define INFO_LINE_TOP 19  // first row of the topmost line ...
+#define INFO_LINE_STEP 16 // ... and the distance to the next one
+static int infoPage = 0;  // visible page, the knob turns it
 
-    // Clear the buffer and set font
-    screen.clearBuffer();
-    screen.setFontPosTop();
-    screen.setFont(u8g2_font_7x14B_tf);
+// One of the lines: what it is on the left, what it stands at on the right
+static void infoLine(int index, char *label, size_t labelSize, char *value, size_t valueSize)
+{
+  switch (index)
+  {
+  case 0:
+    snprintf(label, labelSize, "Cups");
+    snprintf(value, valueSize, "%.1f/%.1fg", setCupWeight, setCupWeight2);
+    break;
+  case 1:
+    snprintf(label, labelSize, "Delay");
+    snprintf(value, valueSize, "%.2f s", delayEnd);
+    break;
+  case 2:
+    snprintf(label, labelSize, "Factor");
+    snprintf(value, valueSize, "%.1f", scaleFactor);
+    break;
+  case 3:
+    snprintf(label, labelSize, "Shots");
+    snprintf(value, valueSize, "%u", shotCount);
+    break;
+  default:
+    // The scatter of the resting scale, as far as the Noise measurement has ever been run on it
+    snprintf(label, labelSize, "Noise");
+    if (noiseSigma > 0)
+    {
+      snprintf(value, valueSize, "%.3f g", noiseSigma);
+    }
+    else
+    {
+      snprintf(value, valueSize, "--");
+    }
+    break;
+  }
+}
 
-    // Display title
-    CenterPrintToScreen("System Info", 0);
+void showInfoMenu()
+{
+  char label[16], value[24];
 
-    // Display cup weight (smaller font so four lines fit)
-    screen.setFont(u8g2_font_6x10_tr);
-    snprintf(buf, sizeof(buf), "Cups: %.1f/%.1fg", setCupWeight, setCupWeight2);
-    LeftPrintToScreen(buf, 16);
+  screen.clearBuffer();
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_7x14B_tf);
+  CenterPrintToScreen("System Info", 0);
 
-    // Display the delay the grinder is stopped with
-    snprintf(buf, sizeof(buf), "Delay: %3.2fs", delayEnd);
-    LeftPrintToScreen(buf, 28);
+  // Which page of them this is, small enough to stand next to the title
+  if (INFO_PAGES > 1)
+  {
+    screen.setFont(u8g2_font_5x7_tf);
+    snprintf(value, sizeof(value), "%d/%d", infoPage + 1, INFO_PAGES);
+    RightPrintToScreen(value, 1);
+  }
 
-    // Display scale factor
-    snprintf(buf, sizeof(buf), "Scale Factor: %.1f", scaleFactor);
-    LeftPrintToScreen(buf, 40);
+  screen.setFont(u8g2_font_7x13_tr);
+  for (int row = 0; row < INFO_LINES_PER_PAGE; row++)
+  {
+    int index = infoPage * INFO_LINES_PER_PAGE + row;
+    if (index >= INFO_LINES)
+    {
+      break; // the last page is not full
+    }
+    infoLine(index, label, sizeof(label), value, sizeof(value));
+    u8g2_uint_t y = INFO_LINE_TOP + row * INFO_LINE_STEP;
+    LeftPrintToScreen(label, y);
+    RightPrintToScreen(value, y);
+  }
 
-    // Display shot count
-    snprintf(buf, sizeof(buf), "Shot Count: %u", shotCount);
-    LeftPrintToScreen(buf, 52);
+  screen.sendBuffer();
+}
 
-    // Send buffer to the display
-    screen.sendBuffer();
+// Turning the knob in the Info Menu pages through the lines
+void infoMenuOnTurn(int steps)
+{
+  infoPage = ((infoPage + steps) % INFO_PAGES + INFO_PAGES) % INFO_PAGES;
+}
 
-    // No unnecessary delays or clearing here
+// Opening it always starts on the first page
+void resetInfoMenu()
+{
+  infoPage = 0;
+}
+
+// The noise measurement of the Calibrate submenu: what a single reading of this scale is worth.
+// Every raw reading of the resting scale is collected, and how far each of them landed from the
+// average of all of them is drawn as a distribution - a column per band of that distance, as tall as
+// the number of readings that fell into it. A load cell scatters normally, so what grows out of it is
+// a bell, and the sigma over it is its width.
+//
+// For the first NOISE_DURATION_MS a bar stands where the sigma will: what the first readings say
+// about the scatter says more about how few of them there are than about the scale. Once the bar is
+// full it goes and the sigma takes its place, and the measurement carries on - every further reading
+// makes the bell a little smoother - until a click or a turn asks whether to keep the sigma.
+//
+// The readings are all kept instead of being counted into the columns as they come, so the average,
+// the sigma and the whole distribution are worked out from all of them again for every new one. That
+// is what lets the middle of the bell stay where it belongs while it fills up: a zero point drifting
+// by a few hundredths moves the middle along with it instead of smearing the columns out into a wider
+// bell than the scale really has. NOISE_SAMPLES of them fit, which is minutes of collecting; a
+// measurement left standing longer than that keeps its last state
+#define NOISE_PLOT_TOP 22     // rows the columns stand in ...
+#define NOISE_PLOT_BOTTOM 62  // ... down to this one, the line under them is the last row
+#define NOISE_PLOT_LEFT 2     // first column of the drawing, NOISE_BINS * NOISE_BIN_PIXELS wide
+#define NOISE_VALUE_TOP 0     // the row the sigma is written in, and the bar that waits for it
+#define NOISE_BAR_TOP 4
+#define NOISE_BAR_WIDTH 90    // about as wide as the sigma that replaces it
+#define NOISE_BAR_HEIGHT 9
+#define NOISE_SQRT_TWO_PI 2.5066f // the peak of a normal distribution is its area over sigma times this
+#define NOISE_OPTION_SAVE_Y 28    // the two options of the screen that asks whether to keep a sigma
+#define NOISE_OPTION_DISCARD_Y 46
+
+static float noiseSamples[NOISE_SAMPLES]; // every raw reading of the measurement, in grams
+static int noiseCount = 0;
+static unsigned long noiseStartedAt = 0;
+static double noiseMean = 0;           // g, the average of the readings, the middle of the bell
+static double noiseLiveSigma = 0;      // g, their scatter, the number over the drawing
+static float noiseBinWidth = 0;        // g one column covers
+static uint16_t noiseBins[NOISE_BINS]; // readings that fell into each of them
+static bool noiseKeep = true;          // Save is the selected option of the screen that asks
+
+// Starts a measurement over, called when the Noise entry of the Calibrate submenu is opened
+void startNoiseMeasurement()
+{
+  noiseCount = 0;
+  noiseStartedAt = millis();
+  noiseMean = noiseLiveSigma = 0;
+  noiseBinWidth = 0;
+  memset(noiseBins, 0, sizeof(noiseBins));
+}
+
+// Whether the bar has stood its time: from here on the sigma is shown and worth keeping
+bool noiseMeasurementReady()
+{
+  return millis() - noiseStartedAt >= NOISE_DURATION_MS;
+}
+
+double noiseMeasuredSigma()
+{
+  return noiseLiveSigma;
+}
+
+// Average, sigma and the columns, all of them over every reading collected so far
+static void noiseRecompute()
+{
+  double sum = 0;
+  for (int i = 0; i < noiseCount; i++)
+  {
+    sum += noiseSamples[i];
+  }
+  noiseMean = noiseCount > 0 ? sum / noiseCount : 0;
+
+  double squares = 0;
+  float furthest = 0;
+  for (int i = 0; i < noiseCount; i++)
+  {
+    float off = (float)(noiseSamples[i] - noiseMean);
+    squares += (double)off * off;
+    furthest = max(furthest, (float)fabs(off));
+  }
+  noiseLiveSigma = noiseCount > 1 ? sqrt(squares / (noiseCount - 1)) : 0;
+
+  // How wide a column is. Over the first readings the sigma is still jumping around, so the width
+  // follows it; after that it stands still and the bell fills up at a scale that no longer moves.
+  // A reading further out than the outermost column reaches is all that ever widens it again, and
+  // then only by as much as it takes to hold that reading
+  float needed = furthest / (NOISE_BINS / 2);
+  if (noiseCount < NOISE_SETTLE_SAMPLES)
+  {
+    float fromSigma = (float)(2 * NOISE_RANGE_SIGMAS * noiseLiveSigma / NOISE_BINS);
+    noiseBinWidth = max(fromSigma, needed);
+  }
+  else
+  {
+    noiseBinWidth = max(noiseBinWidth, needed);
+  }
+
+  memset(noiseBins, 0, sizeof(noiseBins));
+  if (noiseBinWidth <= 0)
+  {
+    return; // nothing scatters yet, every reading is the average
+  }
+  for (int i = 0; i < noiseCount; i++)
+  {
+    int bin = NOISE_BINS / 2 + (int)lroundf((noiseSamples[i] - noiseMean) / noiseBinWidth);
+    if (bin >= 0 && bin < NOISE_BINS && noiseBins[bin] < 65535)
+    {
+      noiseBins[bin]++;
+    }
+  }
+}
+
+// Takes one raw reading of the load cell, called for every single one of them. Only the readings that
+// arrive while the Noise screen itself is open are part of a measurement - the screen that asks
+// whether to keep its sigma is already a different one, so the number it asks about stands still
+void noiseSample(double grams)
+{
+  if (scaleStatus != STATUS_IN_SUBMENU || currentSetting != NOISE_SETTING ||
+      noiseCount >= NOISE_SAMPLES)
+  {
+    return;
+  }
+  noiseSamples[noiseCount++] = (float)grams;
+  noiseRecompute();
+}
+
+// What the tallest column of the drawing is measured against: how tall the middle of the bell will
+// stand once the readings of the twenty seconds are in. Scaling to that instead of to the tallest
+// column there is right now is what lets the distribution grow into its height, rather than being
+// stretched to the top from the first few readings on. Past those twenty seconds the count itself
+// takes over, so the bell holds the height it has reached and only gets smoother. A distribution that
+// comes out taller than expected is still not cut off - then it is the tallest column that sets the scale
+static float noiseFullScale()
+{
+  int highest = 0;
+  for (int i = 0; i < NOISE_BINS; i++)
+  {
+    highest = max(highest, (int)noiseBins[i]);
+  }
+  float expected = 0;
+  if (noiseLiveSigma > 0)
+  {
+    float readings = max((float)NOISE_DURATION_MS / 1000.0f * NOISE_RATE_HZ, (float)noiseCount);
+    expected = readings * noiseBinWidth / (float)(noiseLiveSigma * NOISE_SQRT_TWO_PI);
+  }
+  float scale = max(expected, (float)highest);
+  return scale > 0 ? scale : 1;
+}
+
+// The sigma, in the only font of the library that has a greek letter to name it by. It stands in the
+// same place on the measuring screen and on the one that asks whether to keep it, so that the two
+// read as the same measurement
+static void drawNoiseSigma()
+{
+  char buf[24];
+  snprintf(buf, sizeof(buf), "\xcf\x83 = %.3f g", noiseLiveSigma); // U+03C3, the file stays ASCII
+  screen.setFont(u8g2_font_10x20_t_greek);
+  screen.setFontPosTop();
+  screen.drawUTF8(64 - screen.getUTF8Width(buf) / 2, NOISE_VALUE_TOP, buf);
+}
+
+// The Noise screen: the distribution the sigma is measured from, under the bar that has to run out
+// before there is a sigma worth showing
+void showNoiseScreen()
+{
+  bool ready = noiseMeasurementReady();
+  if (!ready)
+  {
+    // Nobody touches anything while the bar runs, and a display falling asleep would end the
+    // measurement: it counts as use of the scale until the bar is full, the sleep timer starts there
+    lastActivityAt = millis();
+  }
+
+  screen.clearBuffer();
+
+  if (ready)
+  {
+    drawNoiseSigma();
+  }
+  else
+  {
+    // The bar stands where the sigma will, and simply goes when it is full
+    unsigned long elapsed = millis() - noiseStartedAt;
+    int inside = NOISE_BAR_WIDTH - 2;
+    int left = 64 - NOISE_BAR_WIDTH / 2;
+    int filled = (int)((unsigned long)inside * elapsed / NOISE_DURATION_MS);
+    screen.drawFrame(left, NOISE_BAR_TOP, NOISE_BAR_WIDTH, NOISE_BAR_HEIGHT);
+    if (filled > 0)
+    {
+      screen.drawBox(left + 1, NOISE_BAR_TOP + 1, constrain(filled, 0, inside), NOISE_BAR_HEIGHT - 2);
+    }
+  }
+
+  // The distribution, one column per band of distance from the average, on a line of its own
+  float full = noiseFullScale();
+  for (int i = 0; i < NOISE_BINS; i++)
+  {
+    int height = (int)lroundf(noiseBins[i] / full * (NOISE_PLOT_BOTTOM - NOISE_PLOT_TOP + 1));
+    height = constrain(height, 0, NOISE_PLOT_BOTTOM - NOISE_PLOT_TOP + 1);
+    if (height > 0)
+    {
+      screen.drawBox(NOISE_PLOT_LEFT + i * NOISE_BIN_PIXELS, NOISE_PLOT_BOTTOM + 1 - height,
+                     NOISE_BIN_PIXELS - 1, height);
+    }
+  }
+  screen.drawHLine(NOISE_PLOT_LEFT, NOISE_PLOT_BOTTOM + 1, NOISE_BINS * NOISE_BIN_PIXELS - 1);
+
+  screen.sendBuffer();
+}
+
+// Leaving a measurement that has stood its time does not throw it away and does not save it either:
+// this asks which of the two it is to be, with the sigma it is about still on the screen
+void showNoiseSaveScreen()
+{
+  screen.clearBuffer();
+  drawNoiseSigma();
+  screen.setFont(u8g2_font_7x13_tr);
+  if (noiseKeep)
+  {
+    LeftPrintActiveToScreen("Save", NOISE_OPTION_SAVE_Y);
+    LeftPrintToScreen("Discard", NOISE_OPTION_DISCARD_Y);
+  }
+  else
+  {
+    LeftPrintToScreen("Save", NOISE_OPTION_SAVE_Y);
+    LeftPrintActiveToScreen("Discard", NOISE_OPTION_DISCARD_Y);
+  }
+  screen.sendBuffer();
+}
+
+// Turning switches between the two, however far it is turned
+void noiseSaveOnTurn(int steps)
+{
+  if (steps != 0)
+  {
+    noiseKeep = !noiseKeep;
+  }
+}
+
+// The question always opens on Save, the measurement was asked for after all
+void resetNoiseSave()
+{
+  noiseKeep = true;
+}
+
+bool noiseSaveSelected()
+{
+  return noiseKeep;
 }
 
 void showDebugModeStatus(bool debugMode)
@@ -776,6 +1086,14 @@ void showSetting()
   else if (currentSetting == CALIBRATE_MENU_SETTING)
   {
     showCalibrateMenu();
+  }
+  else if (currentSetting == NOISE_SETTING)
+  {
+    showNoiseScreen();
+  }
+  else if (currentSetting == NOISE_SAVE_SETTING)
+  {
+    showNoiseSaveScreen();
   }
   else if (currentSetting == GRIND_SCREEN_SETTING)
   {

@@ -14,6 +14,7 @@ double setCupWeight2 = 0;     // Weight of the second cup set by the user
 double delayEnd = DELAY_END_DEFAULT; // s the grinder keeps delivering after the switch-off
 double grindFlow = 0;         // g/s, the mass flow of the running grind, see stopping logic below
 double scaleFactor = LOADCELL_SCALE_FACTOR; // Load cell calibration factor
+double noiseSigma = 0;        // g, the scatter of the resting scale, measured in the Calibrate submenu
 bool scaleMode = false;       // Indicates if the scale is used in timer mode
 bool grindMode = true;        // Grinder mode: impulse (false) or continuous (true, default)
 int grindScreenStyle = GRIND_STYLE_DEFAULT; // How the grinding screen shows the progress
@@ -563,6 +564,7 @@ void updateScale(void *parameter) {
                 double grams = (raw - loadcell.get_offset()) / (double)loadcell.get_scale();
                 grindLogSample(raw, grams);
                 recordSwitchOffReading(grams); // the finished screen draws the switch-off from these
+                noiseSample(grams);            // ... and the Noise screen its distribution
                 rawData.push(grams); // unfiltered, for the steadiness checks
                 sum += grams;
                 taken++;
@@ -1078,6 +1080,7 @@ void setupScale() {
 
     preferences.begin("scale", false);
     scaleFactor = preferences.getDouble("calibration", (double)LOADCELL_SCALE_FACTOR);
+    noiseSigma = preferences.getDouble("noise", 0); // 0 until the Noise measurement has been run once
     setWeight = preferences.getDouble("setWeight", (double)COFFEE_DOSE_WEIGHT);
     // The stored name stays "deadtime": a scale that has already calibrated keeps its value
     delayEnd = constrain(preferences.getDouble("deadtime", (double)DELAY_END_DEFAULT), DELAY_MIN, DELAY_MAX);
