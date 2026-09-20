@@ -33,9 +33,10 @@ draw; shot grinding-failed
 # The finished screen averages the raw readings from the moment the dose was confirmed, so each of
 # these sections feeds a second of readings and then enters the screen with "verifiedAgo"
 [grinding finished]
-set cupWeightEmpty 396.1; set grindTime 7.9
+set cupWeightEmpty 396.1; set grindTime 7.9; set shotCount 327
 weight 413.50; wait 400; weight 413.56; wait 400; weight 413.53; wait 400
 set verifiedAgo 1.2; set scaleStatus 2; draw; shot grinding-finished # 0.07 g under the target
+turn 1; draw; shot grinding-finished-details # the knob pages to the details of the grind
 
 [grinding finished, off target]
 set cupWeightEmpty 396.1; set grindTime 7.9

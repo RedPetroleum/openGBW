@@ -105,6 +105,12 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define DEVIATION_SIGN_TOP (DEVIATION_VALUE_TOP + 8) // first row of its bar, the middle of the digits
 #define DEVIATION_SIGN_GAP 3      // pixels between the sign and the first digit
 
+// Second page of the finished screen: what the grind itself was, as four rows of label and value
+#define FINISHED_PAGES 2          // the deviation and the details, the knob pages between them
+#define FINISHED_DETAIL_ROWS 4
+#define FINISHED_DETAIL_TOP 3     // first row of the topmost line ...
+#define FINISHED_DETAIL_STEP 15   // ... and the distance to the next one
+
 // A weight that rounds to zero is shown without a sign: a reading a few hundredths below the cup
 // weight would otherwise appear as "-0.0" while the grinder is running
 static double noMinusZero(double weight)
@@ -1024,6 +1030,14 @@ static void drawDeviationSign(int left, bool minus)
   }
 }
 
+static int finishedPage = 0; // Page of the finished screen the knob has turned to
+
+// Turning the knob on the finished screen pages between the deviation and the details of the grind
+void finishedScreenOnTurn(int steps)
+{
+  finishedPage = ((finishedPage + steps) % FINISHED_PAGES + FINISHED_PAGES) % FINISHED_PAGES;
+}
+
 static float deviationRangeShown = 0; // half of the drawn scale in grams, follows the deviation smoothly
 static unsigned long deviationDrawnAt = 0; // Time of the last update of the scale
 
@@ -1063,6 +1077,43 @@ static void drawDeviationScale(double deviation)
   }
 
   screen.drawVLine(zeroX, y - DEVIATION_ZERO_ABOVE, DEVIATION_ZERO_HEIGHT); // the set weight
+}
+
+// The second page of the finished screen: which grind it was, how long it ran, the dose it ended up
+// with and the throughput that makes - the average over the whole grind, not the flow at the end
+static void drawGrindDetails()
+{
+  long grindMs = (long)(finishedGrindingAt - startedGrindingAt); // survives a wrap of millis()
+  bool timed = startedGrindingAt > 0 && grindMs > 0;
+  double seconds = timed ? grindMs / 1000.0 : 0;
+  double dose = noMinusZero(verifiedDose());
+
+  const char *labels[FINISHED_DETAIL_ROWS] = {"Shot", "Time", "Dose", "Flow"};
+  char values[FINISHED_DETAIL_ROWS][16];
+  snprintf(values[0], sizeof(values[0]), "%u", shotCount);
+  snprintf(values[2], sizeof(values[2]), "%.2f g", dose);
+  if (timed)
+  {
+    snprintf(values[1], sizeof(values[1]), "%.1f s", seconds);
+    snprintf(values[3], sizeof(values[3]), "%.0f mg/s", dose * 1000 / seconds);
+  }
+  else
+  {
+    strcpy(values[1], "-"); // a grind in scale mode that never started counting
+    strcpy(values[3], "-");
+  }
+
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_7x13_tr);
+  for (int row = 0; row < FINISHED_DETAIL_ROWS; row++)
+  {
+    LeftPrintToScreen(labels[row], FINISHED_DETAIL_TOP + row * FINISHED_DETAIL_STEP);
+  }
+  screen.setFont(u8g2_font_7x14B_tf);
+  for (int row = 0; row < FINISHED_DETAIL_ROWS; row++)
+  {
+    RightPrintToScreen(values[row], FINISHED_DETAIL_TOP + row * FINISHED_DETAIL_STEP);
+  }
 }
 
 // The grind as a curve: how the weight in the cup grew over the whole grind, with the set weight as a
@@ -1287,6 +1338,7 @@ void refreshDisplay()
     {
       grindProgressShown = 0; // the next grind starts at the beginning again
       deviationRangeShown = 0;
+      finishedPage = 0;       // ... and on the first page of the finished screen
       resetGrindCurve();
 
       screen.setFontPosTop();
@@ -1314,6 +1366,10 @@ void refreshDisplay()
       CenterPrintToScreen(grindFailReason, 18);
       CenterPrintToScreen("Press knob", 36);
       CenterPrintToScreen("to reset", 50);
+    }
+    else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage > 0)
+    {
+      drawGrindDetails();
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED)
     {

@@ -382,6 +382,14 @@ void rotary_loop()
             encoderValue = newValue;
             break;
         }
+        case STATUS_GRINDING_FINISHED:
+        {
+            // Page between the deviation and the details of the grind
+            int newValue = rotaryEncoder.readEncoder();
+            finishedScreenOnTurn((newValue - encoderValue) * -encoderDir);
+            encoderValue = newValue;
+            break;
+        }
         case STATUS_IN_MENU:
         {
             // Navigate through menu items
