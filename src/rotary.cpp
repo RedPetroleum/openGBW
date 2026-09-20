@@ -62,7 +62,7 @@ void rotary_onButtonClick()
 
         // Use the display method from display.cpp
         showDebugModeStatus(debugMode);
-        menuItemsCount = debugMode ? 13 : 12;
+        setupMenuItems(); // the Debug Menu comes and goes with it
         clickCount = 0; // Reset the click count
         return;         // Exit early to prevent other actions
     }
@@ -83,57 +83,57 @@ void rotary_onButtonClick()
     }
     else if (scaleStatus == STATUS_IN_MENU)
     {
-        // Navigate through the menu items
-        switch (currentMenuItem)
+        // Navigate through the menu items, by what the item is and not by where it stands
+        switch (menuItems[currentMenuItem].id)
         {
-        case 0: // Exit
+        case MENU_EXIT:
             scaleStatus = STATUS_EMPTY;
             rotaryEncoder.setAcceleration(100);
             Serial.println("Exited Menu");
             break;
-        case 1: // Calibrate Menu
+        case MENU_CALIBRATE:
             currentSetting = CALIBRATE_MENU_SETTING;
             scaleStatus = STATUS_IN_SUBMENU;
             currentCalibrateMenuItem = 0; // Start on "Exit"
             Serial.println("Calibrate Menu");
             break;
-        case 2: // Scale Mode Menu
+        case MENU_SCALE_MODE:
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 3;
             Serial.println("Scale Mode Menu");
             break;
-        case 3: // Grinding Mode Menu
+        case MENU_GRIND_MODE:
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 4;
             Serial.println("Grind Mode Menu");
             break;
-        case 4: // Info Menu
+        case MENU_INFO:
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 5;
             Serial.println("Info Menu");
             break;
-        case 5: // Sleep Timer Menu
+        case MENU_SLEEP_TIMER:
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 8;
             Serial.println("Sleep Timer Menu");
             break;
-        case 6: // Style Menu
+        case MENU_STYLE:
             currentSetting = STYLE_MENU_SETTING;
             scaleStatus = STATUS_IN_SUBMENU;
             currentStyleMenuItem = 0; // Start on "Exit"
             Serial.println("Style Menu");
             break;
-        case 7: // Reset Menu
+        case MENU_RESET:
             scaleStatus = STATUS_IN_SUBMENU;
             currentSetting = 6;
             Serial.println("Reset Menu");
             break;
-        case 8: // Games Menu
+        case MENU_GAMES:
             currentSetting = GAMES_MENU_SETTING;
             scaleStatus = STATUS_IN_SUBMENU;
             Serial.println("Games Menu");
             break;
-        case 9: // Debug Menu
+        case MENU_DEBUG:
             if (debugMode)
             {
                 scaleStatus = STATUS_IN_SUBMENU;

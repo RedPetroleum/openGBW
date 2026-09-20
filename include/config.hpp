@@ -45,7 +45,24 @@ struct GrindRecord
 #define STYLE_MENU_SETTING 15 // currentSetting while the Style submenu is shown
 #define GRIND_SCREEN_SETTING 16 // currentSetting while the grinding screen style is chosen
 #define BOOT_SCREEN_SETTING 17 // currentSetting while the initializing screen style is chosen
+// The items of the main menu. A click is handled by the id, not by the position: which of them are
+// visible depends on SLEEP_TIMER_MENU and on the debug mode
+#define MENU_EXIT 0
+#define MENU_CALIBRATE 1
+#define MENU_SCALE_MODE 2
+#define MENU_GRIND_MODE 3
+#define MENU_INFO 4
+#define MENU_SLEEP_TIMER 5
+#define MENU_STYLE 6
+#define MENU_RESET 7
+#define MENU_GAMES 8
+#define MENU_DEBUG 9
+
 #define CALIBRATE_MENU_SETTING 18 // currentSetting while the Calibrate submenu is shown
+
+// Whether the Sleep Timer stands in the menu. The timer itself runs either way and is set in
+// SLEEP_AFTER_MS; only the entry that changes it is hidden, and only this line brings it back
+#define SLEEP_TIMER_MENU false
 
 // How the grinding screen shows the progress, chosen in the Style menu
 #define GRIND_STYLE_BAR 0    // a bar below the weights

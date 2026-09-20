@@ -138,22 +138,25 @@ void WeightPrintToScreen(double weight, u8g2_uint_t y)
 // Menu items for user interface
 int currentMenuItem = 0;      // Index of the current menu item
 int currentSetting;           // Index of the current setting being adjusted
-int menuItemsCount = debugMode ? 10 : 9;      // Total number of menu items
-
- // Menu items; what is set once for a scale and a grinder sits in the Calibrate submenu
-MenuItem menuItems[10] = {
-    {0, false, "Exit", 0},
-    {1, false, "Calibrate", 0},
-    {2, false, "Scale Mode", 0},
-    {3, false, "Grinding Mode", 0},
-    {4, false, "Info Menu", 0},
-    {5, false, "Sleep Timer", 0},
-    {6, false, "Style", 0},
-    {7, false, "Reset", 0},
-    {8, false, "Games", 0},
-    // Debug menu placeholder (conditional)
-    {9, false, "Debug Menu", 0} // Visible only if debugMode is true
+// Every menu item with the id the click is handled by; what is set once for a scale and a grinder
+// sits in the Calibrate submenu. Two of them are not always there, so the menu is built out of this
+// list in setupMenuItems() and the click looks at the id, not at the position
+static const MenuItem allMenuItems[] = {
+    {MENU_EXIT, false, "Exit", 0},
+    {MENU_CALIBRATE, false, "Calibrate", 0},
+    {MENU_SCALE_MODE, false, "Scale Mode", 0},
+    {MENU_GRIND_MODE, false, "Grinding Mode", 0},
+    {MENU_INFO, false, "Info Menu", 0},
+    {MENU_SLEEP_TIMER, false, "Sleep Timer", 0}, // only where SLEEP_TIMER_MENU says so
+    {MENU_STYLE, false, "Style", 0},
+    {MENU_RESET, false, "Reset", 0},
+    {MENU_GAMES, false, "Games", 0},
+    {MENU_DEBUG, false, "Debug Menu", 0}         // only in debug mode
 };
+static const int allMenuItemsCount = sizeof(allMenuItems) / sizeof(allMenuItems[0]);
+
+MenuItem menuItems[sizeof(allMenuItems) / sizeof(allMenuItems[0])]; // the visible ones, in order
+int menuItemsCount = 0;
 
 int debugMenuItemsCount = 5; // Number of items in the Debug Menu
 int currentDebugMenuItem = 0; // Current selection in the Debug Menu
@@ -334,12 +337,20 @@ void showDebugMenu()
 }
 
 
+// Builds the menu out of the items that are visible right now, which is everything but the Sleep Timer
+// where SLEEP_TIMER_MENU is off and the Debug Menu outside of debug mode
 void setupMenuItems() {
-    if (debugMode) {
-        menuItemsCount = 10; // Include Debug Menu
-    } else {
-        menuItemsCount = 9; // Exclude Debug Menu
+    menuItemsCount = 0;
+    for (int i = 0; i < allMenuItemsCount; i++) {
+        if (allMenuItems[i].id == MENU_SLEEP_TIMER && !SLEEP_TIMER_MENU) {
+            continue;
+        }
+        if (allMenuItems[i].id == MENU_DEBUG && !debugMode) {
+            continue;
+        }
+        menuItems[menuItemsCount++] = allMenuItems[i];
     }
+    currentMenuItem = constrain(currentMenuItem, 0, menuItemsCount - 1);
 }
 
 // The display sleeps when neither the scale nor the knob was used for sleepTime
@@ -1709,6 +1720,7 @@ void updateDisplay(void *parameter)
 // Function to initialize the display and start the display update task
 void setupDisplay()
 {
+  setupMenuItems(); // which items the menu holds right now
   screen.begin();                    // Initialize the display
   screen.setFont(u8g2_font_7x13_tr); // Set the default font
   screen.setFontPosTop();

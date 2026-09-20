@@ -91,9 +91,10 @@ Press the knob on the main screen to open the menu, turn to select and press to 
 | Scale Mode | GBW (default) or scale only (no grinder control, timer starts when the weight increases) |
 | Grinding Mode | continuous (relay stays closed while grinding) or impulse (short pulse to start and stop) |
 | Info Menu | cup weights, delay, scale factor and shot count |
-| Sleep Timer | time without activity until the display turns off (default 60 seconds). Tapping the scale, turning or pressing the knob wakes it without changing anything |
 | Reset | restore all settings to their defaults |
 | Games | see below |
+
+The display turns off after `SLEEP_AFTER_MS` without activity; tapping the scale, turning or pressing the knob wakes it without changing anything. The menu entry that changes that time is hidden, `SLEEP_TIMER_MENU` in `include/config.hpp` brings it back.
 
 #### Calibrate
 

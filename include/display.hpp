@@ -21,6 +21,7 @@ void handleDebugMenuAction();
 void showStyleMenu();            // Draws the Style submenu
 void styleMenuOnTurn(int steps); // Moves the selection in the Style submenu
 void styleMenuOnClick();         // Opens the selected style setting or returns to the main menu
+void setupMenuItems();               // Builds the menu from the items that are visible
 void showCalibrateMenu();            // Draws the Calibrate submenu
 void calibrateMenuOnTurn(int steps); // Moves the selection in it
 void calibrateMenuOnClick();         // Opens the selected setting or returns to the main menu
