@@ -66,6 +66,7 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define BOOT_READY_MS 3000      // time the bar needs to fill: the load cell settles, 20 tare measures
                                 // at 10/s follow and then the first reading. The boot screen is not
                                 // left before the bar is full, even if the scale is ready earlier
+#define BOOT_CROSS_HOLD_MS 200  // the cross has finished turning this long before the scale is ready
 #define BOOT_BAR_Y 54
 #define BOOT_BAR_HEIGHT 9
 
@@ -846,7 +847,9 @@ static void drawBootScreen()
   float progress = min(1.0f, elapsed / (float)BOOT_READY_MS);
   if (bootScreenStyle == BOOT_STYLE_CROSS)
   {
-    drawBootCross(progress); // this style is the whole screen, the cup stays out of it
+    // This style is the whole screen, the cup stays out of it. The cross turns a little faster than the
+    // scale needs and then stands upright for the last BOOT_CROSS_HOLD_MS
+    drawBootCross(min(1.0f, elapsed / (float)(BOOT_READY_MS - BOOT_CROSS_HOLD_MS)));
     return;
   }
   float turn = elapsed % BOOT_TURN_MS / (float)BOOT_TURN_MS * 2 * PI;
