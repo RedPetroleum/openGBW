@@ -151,6 +151,59 @@ T MathBuffer<T, S>::averageOfLast(size_t n) {
   return sum / (T)n;
 }
 
+// The average of the last n samples with the two oldest of them counted with less weight:
+// the oldest with `oldest`, the one after it with `second`, every other one with 1. Reaching
+// the edge of a settled stretch, the oldest samples still carry a little of the movement before
+// it, and they are meant to say less about the value than the newest ones.
+// 0 if there are not that many samples yet, and with two or fewer the weights are all there is,
+// so those are taken plain
+template<typename T,size_t S>
+T MathBuffer<T, S>::taperedAverageOfLast(size_t n, T oldest, T second) {
+  if (n == 0 || count < n) {
+    return 0;
+  }
+  if (n <= 2) {
+    return averageOfLast(n);
+  }
+
+  T sum = 0, weights = 0;
+  for (int i = 0; i < (int)n; i++) {
+    int index = (headIndex - i); // going backward to go from newest to oldest
+    if (index < 0) { // wrap around
+      index += S;
+    }
+    T weight = i == (int)n - 1 ? oldest : (i == (int)n - 2 ? second : 1);
+    sum += buffer[index] * weight;
+    weights += weight;
+  }
+
+  return sum / weights;
+}
+
+// The same taper over everything newer than cutoffMs, see taperedAverageOfLast().
+// How many samples that is is only known once they have been walked, so they are all summed
+// with a weight of 1 and the two oldest are taken back out of the sum afterwards
+template<typename T,size_t S>
+T MathBuffer<T, S>::taperedAverageSince(int64_t cutoffMs, T oldest, T second) {
+  T sum = 0, last = 0, secondLast = 0;
+  size_t seen = 0;
+  executeOnSamplesSince(cutoffMs, [&](T value, int64_t ms) {
+    secondLast = last; // walked newest to oldest, so these two end up being the oldest two
+    last = value;
+    sum += value;
+    seen++;
+  });
+
+  if (seen == 0) {
+    return 0;
+  }
+  if (seen <= 2) {
+    return sum / (T)seen; // with two or fewer the weights are all there is
+  }
+  return (sum - (1 - oldest) * last - (1 - second) * secondLast)
+         / ((T)seen - (1 - oldest) - (1 - second));
+}
+
 // True if the last n samples all lie within tolerance of each other,
 // false if there are not that many samples yet
 template<typename T,size_t S>

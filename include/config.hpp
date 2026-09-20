@@ -178,6 +178,14 @@ extern bool debugMode;
 #define STEADY_READINGS_LONG 20  // ... and two seconds
 #define STEADY_TOLERANCE_LONG 0.7
 
+// Once such a window has been accepted, the average over it says what the weight is - the empty cup in
+// the cup detection, the dose after grinding. That window reaches back to the edge of the settled
+// stretch, and its oldest readings still carry a little of what happened before it: the cup coming to
+// rest, the last grounds landing. They are therefore counted with less weight, the oldest one least, so
+// the weight of a reading fades in linearly over the first two instead of starting at full strength
+#define VERIFY_WEIGHT_OLDEST 0.33 // a third for the oldest reading of the window ...
+#define VERIFY_WEIGHT_SECOND 0.67 // ... two thirds for the one after it, all the others count fully
+
 #define LOADCELL_DOUT_PIN 19
 #define LOADCELL_SCK_PIN 18
 

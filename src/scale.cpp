@@ -787,7 +787,8 @@ void scaleStatusLoop(void *p) {
                     // hysteresis holds that where it is, which is up to a step away from the average of
                     // the raw readings the cup weight comes from. Everything from here on counts from a
                     // cup that weighs exactly what is displayed
-                    double resting = rawData.averageOfLast(cupOver);
+                    double resting = rawData.taperedAverageOfLast(cupOver, VERIFY_WEIGHT_OLDEST,
+                                                                 VERIFY_WEIGHT_SECOND);
                     cupWeightEmpty = lround(resting / DISPLAY_STEP) * DISPLAY_STEP;
                     microTare(resting - cupWeightEmpty);
 #if FILTER == FILTER_V03
@@ -890,7 +891,8 @@ void scaleStatusLoop(void *p) {
                 // the dose is confirmed, otherwise the sleep timer would leave this state
                 lastActivityAt = millis();
                 // Window of 1s so it always contains readings (an empty window would average to 0)
-                double currentWeight = weightData.averageSince((int64_t)millis() - 1000);
+                double currentWeight = weightData.taperedAverageSince((int64_t)millis() - 1000,
+                                                                      VERIFY_WEIGHT_OLDEST, VERIFY_WEIGHT_SECOND);
                 if (scaleWeight < 5) {
                     startedGrindingAt = 0;
                     scaleStatus = STATUS_EMPTY; // the cup was taken before the dose could be confirmed

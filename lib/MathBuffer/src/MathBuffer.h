@@ -20,6 +20,8 @@ public:
 	T firstValueOlderThan(int64_t cutoffMs);
 	bool spreadOfLast(size_t n, T &lowest, T &highest);
 	T averageOfLast(size_t n);
+	T taperedAverageOfLast(size_t n, T oldest, T second);
+	T taperedAverageSince(int64_t cutoffMs, T oldest, T second);
 	bool isSteady(size_t n, T tolerance);
 
 private:
