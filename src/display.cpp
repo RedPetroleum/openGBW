@@ -99,9 +99,11 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define DEVIATION_ZERO_ABOVE 9    // the mark for the set weight starts this far above the line ...
 #define DEVIATION_ZERO_HEIGHT 13  // ... and reaches past it
 #define DEVIATION_BAR_HEIGHT 5    // thickness of the bar from the middle to the dose
-#define DEVIATION_VALUE_TOP 1     // first row of the deviation over the scale ...
-#define DEVIATION_SIGN_CENTER 10  // ... and the row its sign is centered on, just above the middle of
-                                  // the digits, where a sign of its own size would sit too low
+#define DEVIATION_VALUE_TOP 1     // first row of the deviation over the scale, its digits are 16 tall
+#define DEVIATION_SIGN_LENGTH 8   // the sign is drawn by hand, a length and a thickness that are both
+#define DEVIATION_SIGN_THICK 2    // even keep the plus symmetric on the pixel grid
+#define DEVIATION_SIGN_TOP (DEVIATION_VALUE_TOP + 8) // first row of its bar, the middle of the digits
+#define DEVIATION_SIGN_GAP 3      // pixels between the sign and the first digit
 
 // A weight that rounds to zero is shown without a sign: a reading a few hundredths below the cup
 // weight would otherwise appear as "-0.0" while the grinder is running
@@ -1009,6 +1011,19 @@ static void showGrindProgress(float progress, bool complete)
   }
 }
 
+// The sign of the deviation, a little larger than the one of the digits and centered on the middle of
+// them. Drawn by hand: in the fonts the bar of the plus sits a pixel above the middle of its stroke
+static void drawDeviationSign(int left, bool minus)
+{
+  screen.drawBox(left, DEVIATION_SIGN_TOP, DEVIATION_SIGN_LENGTH, DEVIATION_SIGN_THICK);
+  if (!minus)
+  {
+    screen.drawBox(left + DEVIATION_SIGN_LENGTH / 2 - DEVIATION_SIGN_THICK / 2,
+                   DEVIATION_SIGN_TOP + DEVIATION_SIGN_THICK / 2 - DEVIATION_SIGN_LENGTH / 2,
+                   DEVIATION_SIGN_THICK, DEVIATION_SIGN_LENGTH);
+  }
+}
+
 static float deviationRangeShown = 0; // half of the drawn scale in grams, follows the deviation smoothly
 static unsigned long deviationDrawnAt = 0; // Time of the last update of the scale
 
@@ -1308,20 +1323,17 @@ void refreshDisplay()
       double deviation = dose - setWeight;
       double shownDeviation = lround(deviation * 100) == 0 ? 0.0 : deviation; // no "-0.00"
 
-      // The sign is drawn on its own, one size larger than the digits and a little above their middle
-      const char *sign = shownDeviation > 0 ? "+" : (shownDeviation < 0 ? "-" : "");
       snprintf(buf, sizeof(buf), "%.2f g", fabs(shownDeviation));
-      screen.setFont(u8g2_font_logisoso18_tn);
-      int signWidth = screen.getStrWidth(sign);
+      int signWidth = shownDeviation == 0 ? 0 : DEVIATION_SIGN_LENGTH + DEVIATION_SIGN_GAP;
       screen.setFont(u8g2_font_logisoso16_tf);
       int valueLeft = 64 - (signWidth + screen.getStrWidth(buf)) / 2;
       screen.setFontPosTop();
       screen.setCursor(valueLeft + signWidth, DEVIATION_VALUE_TOP);
       screen.print(buf);
-      screen.setFont(u8g2_font_logisoso18_tn);
-      screen.setFontPosCenter();
-      screen.setCursor(valueLeft, DEVIATION_SIGN_CENTER);
-      screen.print(sign);
+      if (signWidth > 0)
+      {
+        drawDeviationSign(valueLeft, shownDeviation < 0);
+      }
 
       drawDeviationScale(deviation);
 
