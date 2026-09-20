@@ -154,6 +154,7 @@ static void step()
   {
     weightData.push(scaleWeight);
     rawData.push(scaleWeight); // no filter in the simulator, both buffers get the same value
+    recordSwitchOffReading(scaleWeight); // like the sampler of the firmware does with every reading
     scaleLastUpdatedAt = simTime;
     lastReadingAt = simTime;
   }
@@ -252,6 +253,8 @@ static bool setVariable(const std::string &name, const std::string &text, int li
     confirmedDose = value;
   else if (name == "flowAtSwitchOff")
     flowAtSwitchOff = value;
+  else if (name == "doseAtSwitchOff")
+    doseAtSwitchOff = value;
   else if (name == "verifiedAgo") // seconds since the readings count towards the confirmed dose
     doseVerifiedFrom = simTime - (unsigned long)(value * 1000);
   else if (name == "grindTime") // seconds since grinding started (and finished grinds took)

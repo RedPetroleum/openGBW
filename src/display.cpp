@@ -106,7 +106,7 @@ void RightPrintToScreen(char const *str, u8g2_uint_t y)
 #define DEVIATION_SIGN_GAP 3      // pixels between the sign and the first digit
 
 // Second page of the finished screen: what the grind itself was, as four rows of label and value
-#define FINISHED_PAGES 5          // deviation, details, delay, the curve and the flow
+#define FINISHED_PAGES 6          // deviation, the three drawings of the grind, then its numbers
 #define FINISHED_DETAIL_ROWS 4
 #define FINISHED_DETAIL_TOP 3     // first row of the topmost line ...
 #define FINISHED_DETAIL_STEP 15   // ... and the distance to the next one
@@ -1150,7 +1150,7 @@ static void drawDeviationScale(double deviation)
   screen.drawVLine(zeroX, y - DEVIATION_ZERO_ABOVE, DEVIATION_ZERO_HEIGHT); // the set weight
 }
 
-// The second page of the finished screen: which grind it was, how long it ran, and the two numbers the
+// The fifth page of the finished screen: which grind it was, how long it ran, and the two numbers the
 // delay is calibrated from - the dose the grind was confirmed with and the mass flow the grinder
 // was switched off at. Both stand still from the moment the dose is confirmed
 static void drawGrindDetails()
@@ -1192,7 +1192,7 @@ static void drawGrindDetails()
   }
 }
 
-// The third page: the delay of the grinder, the time it keeps delivering after the switch-off.
+// The last page: the delay of the grinder, the time it keeps delivering after the switch-off.
 // The grind ran with one, its dose says what it really was, and the next grind is stopped with the
 // value the two make together (see DELAY_CORRECTION in config.hpp)
 static void drawDelayDetails()
@@ -1381,7 +1381,7 @@ static float grindWeightAt(int index)
   return curveWeights[index] / 100.0f;
 }
 
-// Fourth page of the finished screen: the whole grind as the curve of the weight, with the set weight
+// Second page of the finished screen: the whole grind as the curve of the weight, with the set weight
 // as a dashed line - the same drawing as the grinding screen in its curve style, without its numbers
 static void drawGrindCurvePage()
 {
@@ -1406,9 +1406,17 @@ static void drawGrindCurvePage()
   }
   drawGrindLine(grindWeightAt, top);
   drawGrindGround();
+  // Names the drawing, in the corner the curve starts far below. The dashed target line can run
+  // right through the word, so its few dashes give way to the text
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_5x7_tf);
+  screen.setDrawColor(0);
+  screen.drawBox(0, 0, 31, 8);
+  screen.setDrawColor(1);
+  screen.drawStr(0, 0, "Weight");
 }
 
-// Fifth page: the flow over the same grind, the slope of the curve of the page before
+// Fourth page: the flow over the same grind, the slope of the curve two pages before
 static void drawGrindFlowPage()
 {
   if (curveCount < 2)
@@ -1425,12 +1433,222 @@ static void drawGrindFlowPage()
   }
   drawGrindLine(grindFlowAt, top);
   drawGrindGround();
-  // The top of the scale, the one number the drawing cannot be read without
+  // Names the drawing, in the same corner as on the page before
   screen.setFontPosTop();
   screen.setFont(u8g2_font_5x7_tf);
-  char buf[12];
-  snprintf(buf, sizeof(buf), "%.1fg/s", top);
-  screen.drawStr(0, 0, buf);
+  screen.drawStr(0, 0, "Flow");
+}
+
+// The switch-off up close: the raw readings of the stretch the delay is read off, from a few readings
+// before the grinder went off to a few after the dose was confirmed. It is the same picture the delay
+// is drawn from off the logs (tools/plotverify.py), cut to the moments that carry it: the line the
+// firmware stopped the grinder on, the grounds that still arrived after it, and the weight they added
+// up to. Every raw reading goes in, not the filtered weight - the delay is measured on the raw ones
+#define SWITCHOFF_SAMPLES 128  // readings the recording holds at most, one per pixel of the width
+#define SWITCHOFF_BEFORE 5     // readings kept from before the switch-off ...
+#define SWITCHOFF_AFTER 3      // ... and recorded after the dose was confirmed
+#define SWITCHOFF_TOP 2        // rows the readings are drawn in
+#define SWITCHOFF_BOTTOM 61
+#define SWITCHOFF_MARGIN 0.02f // g of air above and below them
+#define SWITCHOFF_MIN_SPAN 0.2f // g the drawing covers at least, so a quiet scale is not blown up
+
+static int16_t switchOffDose[SWITCHOFF_SAMPLES];      // the readings in hundredths of a gram ...
+static unsigned long switchOffAt[SWITCHOFF_SAMPLES];  // ... and when each of them arrived
+static int switchOffCount = 0;
+static int switchOffVerified = -1;    // index of the first reading after the dose was confirmed
+static unsigned long switchOffVerifiedAt = 0; // and the moment it was, as the recording saw it
+static bool switchOffDone = false;    // the recording is complete and stands still
+
+static void resetSwitchOff()
+{
+  switchOffCount = 0;
+  switchOffVerified = -1;
+  switchOffVerifiedAt = 0;
+  switchOffDone = false;
+}
+
+// Takes one raw reading of the load cell, called for every single one of them. Which of them are kept
+// follows the state of the grind: while the grinder runs only the last SWITCHOFF_BEFORE are held, from
+// the switch-off on every one is recorded, and SWITCHOFF_AFTER readings after the dose was confirmed
+// the recording is complete
+void recordSwitchOffReading(double grams)
+{
+  if (switchOffDone)
+  {
+    // A recording stands until the next grind reaches its switch-off
+    if (scaleStatus == STATUS_GRINDING_IN_PROGRESS)
+    {
+      resetSwitchOff();
+    }
+    else
+    {
+      return;
+    }
+  }
+  bool rolling = scaleStatus == STATUS_GRINDING_IN_PROGRESS;
+  if (!rolling && scaleStatus != STATUS_GRINDING_VERIFYING && scaleStatus != STATUS_GRINDING_FINISHED)
+  {
+    switchOffCount = 0; // nothing is being ground, whatever was held says nothing about a grind
+    return;
+  }
+  if (scaleStatus == STATUS_GRINDING_FINISHED && switchOffVerified < 0)
+  {
+    switchOffVerified = switchOffCount; // this reading is the first one after the confirmation
+    switchOffVerifiedAt = millis();
+  }
+  if (switchOffVerified >= 0 && switchOffCount - switchOffVerified >= SWITCHOFF_AFTER)
+  {
+    switchOffDone = true;
+    return;
+  }
+  if (rolling && switchOffCount >= SWITCHOFF_BEFORE)
+  {
+    // The run-up is only these few readings, the oldest one drops out for the new one
+    for (int i = 0; i < SWITCHOFF_BEFORE - 1; i++)
+    {
+      switchOffDose[i] = switchOffDose[i + 1];
+      switchOffAt[i] = switchOffAt[i + 1];
+    }
+    switchOffCount = SWITCHOFF_BEFORE - 1;
+  }
+  if (switchOffCount >= SWITCHOFF_SAMPLES)
+  {
+    switchOffDone = true; // a dose that never settles cannot fill the recording any further
+    return;
+  }
+  switchOffDose[switchOffCount] = (int16_t)lroundf((grams - cupWeightEmpty) * 100);
+  switchOffAt[switchOffCount] = millis();
+  switchOffCount++;
+}
+
+// Where a moment of the recording sits on the width
+static int switchOffX(unsigned long at)
+{
+  long span = max((long)(switchOffAt[switchOffCount - 1] - switchOffAt[0]), 1L);
+  long since = (long)(at - switchOffAt[0]);
+  return (int)constrain(since * 127 / span, -200L, 400L); // off the screen stays off the screen
+}
+
+// A vertical through the whole drawing, dotted so the readings stay readable where they cross it
+static void drawSwitchOffMoment(int x)
+{
+  if (x < 0 || x > 127)
+  {
+    return;
+  }
+  for (int y = SWITCHOFF_TOP; y <= SWITCHOFF_BOTTOM; y += 3)
+  {
+    screen.drawPixel(x, y);
+  }
+}
+
+// Third page: the switch-off as the raw readings as dots, the line the grinder was stopped on carried
+// on to where the dose ended up, the target and the confirmed dose as horizontals, and the two moments
+// the delay is measured between. Nothing is labelled, the numbers stand on the last page
+static void drawSwitchOffPage()
+{
+  if (switchOffCount < 2)
+  {
+    screen.setFontPosCenter();
+    screen.setFont(u8g2_font_7x13_tr);
+    CenterPrintToScreen("No readings", 32);
+    return;
+  }
+
+  // The drawing is cut to what is in it: the readings, the target and the dose they were confirmed as
+  float lowest = switchOffDose[0] / 100.0f, highest = lowest;
+  for (int i = 1; i < switchOffCount; i++)
+  {
+    lowest = min(lowest, switchOffDose[i] / 100.0f);
+    highest = max(highest, switchOffDose[i] / 100.0f);
+  }
+  // The line the grinder was stopped on starts at the dose it stood at, so that value belongs in the
+  // picture as much as the target and the dose the grind was confirmed with
+  float anchor = flowAtSwitchOff > 0 ? doseAtSwitchOff : setWeight;
+  lowest = min(lowest, (float)min(min(setWeight, confirmedDose), (double)anchor)) - SWITCHOFF_MARGIN;
+  highest = max(highest, (float)max(max(setWeight, confirmedDose), (double)anchor)) + SWITCHOFF_MARGIN;
+  if (highest - lowest < SWITCHOFF_MIN_SPAN)
+  {
+    float middle = (highest + lowest) / 2;
+    lowest = middle - SWITCHOFF_MIN_SPAN / 2;
+    highest = middle + SWITCHOFF_MIN_SPAN / 2;
+  }
+  auto y = [&](float grams) {
+    int row = SWITCHOFF_BOTTOM - (int)lroundf((grams - lowest) / (highest - lowest) *
+                                              (SWITCHOFF_BOTTOM - SWITCHOFF_TOP));
+    return constrain(row, SWITCHOFF_TOP, SWITCHOFF_BOTTOM);
+  };
+
+  // The target dashed, the dose the grind was confirmed with solid: the readings settle on the second
+  int targetY = y(setWeight);
+  for (int x = 0; x < 128; x += 4)
+  {
+    screen.drawPixel(x, targetY);
+    screen.drawPixel(x + 1, targetY);
+  }
+  screen.drawHLine(0, y(confirmedDose), 128);
+
+  drawSwitchOffMoment(switchOffX(finishedGrindingAt));
+  if (switchOffVerifiedAt != 0)
+  {
+    drawSwitchOffMoment(switchOffX(switchOffVerifiedAt));
+  }
+
+  // The line the firmware stopped the grinder on: it runs through the readings before the switch-off
+  // and carries on from there the way the grinder was expected to deliver, up to the dose that came
+  // out of it. What lies between it and the confirmed dose is the delay
+  if (flowAtSwitchOff > 0)
+  {
+    long span = max((long)(switchOffAt[switchOffCount - 1] - switchOffAt[0]), 1L);
+    int offX = switchOffX(finishedGrindingAt);
+    // Where the line stands at a column, and nothing where that lies outside the drawing: the run-up
+    // drops away steeply and would otherwise be a solid edge along the bottom
+    auto drawLineAt = [&](int atX) {
+      float seconds = (atX - offX) * span / 127.0f / 1000.0f;
+      float grams = doseAtSwitchOff + flowAtSwitchOff * seconds;
+      if (grams < lowest || grams > highest)
+      {
+        return;
+      }
+      screen.drawPixel(atX, y(grams));
+    };
+    // Dashed from the switch-off on up to the dose that came out of it: from there on the line is
+    // only what the grinder was expected to still deliver
+    int endX = 127;
+    if (confirmedDose > doseAtSwitchOff)
+    {
+      float carried = (confirmedDose - doseAtSwitchOff) / flowAtSwitchOff * 1000.0f;
+      endX = min(127, offX + (int)lroundf(carried * 127.0f / span));
+    }
+    for (int x = max(0, offX); x <= endX; x += 2)
+    {
+      drawLineAt(x);
+    }
+    for (int x = min(127, offX - 1); x >= 0; x--)
+    {
+      drawLineAt(x); // before it solid, through the readings it was fitted to
+    }
+  }
+
+  // The readings themselves on top of it all, each one a dot the way the logs are drawn
+  for (int i = 0; i < switchOffCount; i++)
+  {
+    int x = switchOffX(switchOffAt[i]);
+    if (x < 0 || x > 127)
+    {
+      continue;
+    }
+    screen.drawPixel(x, y(switchOffDose[i] / 100.0f));
+  }
+
+  // Names the drawing, in the same corner as on the two pages after it. Every line of it can run
+  // through the word, so its pixels give way to the text
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_5x7_tf);
+  screen.setDrawColor(0);
+  screen.drawBox(0, 0, 26, 8);
+  screen.setDrawColor(1);
+  screen.drawStr(0, 0, "Delay");
 }
 
 // The whole grinding screen in the curve style, drawn instead of the weights and the progress
@@ -1635,19 +1853,23 @@ void refreshDisplay()
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 1)
     {
-      drawGrindDetails();
+      drawGrindCurvePage();
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 2)
     {
-      drawDelayDetails();
+      drawSwitchOffPage();
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 3)
     {
-      drawGrindCurvePage();
+      drawGrindFlowPage();
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 4)
     {
-      drawGrindFlowPage();
+      drawGrindDetails();
+    }
+    else if (scaleStatus == STATUS_GRINDING_FINISHED && finishedPage == 5)
+    {
+      drawDelayDetails();
     }
     else if (scaleStatus == STATUS_GRINDING_FINISHED)
     {

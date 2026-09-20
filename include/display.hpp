@@ -26,3 +26,4 @@ void showCalibrateMenu();            // Draws the Calibrate submenu
 void calibrateMenuOnTurn(int steps); // Moves the selection in it
 void calibrateMenuOnClick();         // Opens the selected setting or returns to the main menu
 void finishedScreenOnTurn(int steps); // Pages between the two pages of the finished screen
+void recordSwitchOffReading(double grams); // one raw reading for the picture of the switch-off

@@ -38,7 +38,7 @@ weight 413.50; wait 400; weight 413.56; wait 400; weight 413.53; wait 400
 set verifiedAgo 1.2; set scaleStatus 2; draw; shot grinding-finished # 0.07 g under the target
 set confirmedDose 17.43; set flowAtSwitchOff 2.21
 set delayUsed 0.28; set delayMeasured 0.34; set delayEnd 0.30
-turn 1; draw; shot grinding-finished-details # the knob pages to the details of the grind
+turn 4; draw; shot grinding-finished-details # the knob pages past the drawings to the numbers
 turn 1; draw; shot grinding-finished-delay # ... and on to the delay
 
 [grinding finished, off target]
@@ -71,8 +71,26 @@ weight 94.7; wait 360; weight 94.7; wait 360; weight 94.8; wait 360; weight 94.8
 draw; shot grinding-curve
 # ... and the same grind on the finished screen, which draws it from the same recording
 set scaleStatus 2; set confirmedDose 18.24; set flowAtSwitchOff 2.05
-turn 3; draw; shot grinding-finished-curve # the fourth page: the weight over the grind
-turn 1; draw; shot grinding-finished-flow  # the fifth: the flow that makes
+turn 1; draw; shot grinding-finished-curve # the second page: the weight over the grind
+turn 2; draw; shot grinding-finished-flow  # the fourth: the flow that makes
+
+# The switch-off of a recorded grind (logs/manual-20260920-120523.csv, shot 371) up close: the raw
+# readings from five before the grinder went off to three after the dose was confirmed, the stretch
+# the delay is read off
+[grinding finished, the switch-off]
+set setWeight 17.5
+boot 200; weight 385.6; wait 3200
+set cupWeightEmpty 385.6; set scaleStatus 1; set grindTime 0
+weight 402.723; wait 100; weight 402.714; wait 100; weight 402.809; wait 100; weight 403.032; wait 100
+weight 403.002; wait 100; weight 403.154; wait 100; weight 403.181; wait 100; weight 403.252; wait 100
+set scaleStatus 6; set grindTime 28.2 # the grinder goes off between two readings
+weight 403.377; wait 100; weight 403.327; wait 100; weight 403.462; wait 100; weight 403.631; wait 100
+weight 403.636; wait 100; weight 403.554; wait 100; weight 403.530; wait 100; weight 403.473; wait 100
+weight 403.418; wait 100; weight 403.361; wait 100; weight 403.394; wait 100; weight 403.417; wait 100
+set scaleStatus 2; set confirmedDose 17.88
+set flowAtSwitchOff 0.74; set doseAtSwitchOff 17.36 # the line the firmware stopped the grinder on
+weight 403.470; wait 100; weight 403.529; wait 100; weight 403.539; wait 100
+turn 2; draw; shot grinding-finished-switchoff # the third page, the picture the delay is read off
 [menu]
 click; shot menu
 turn 1; click; shot calibrate-menu # the settings of a scale and a grinder live in here

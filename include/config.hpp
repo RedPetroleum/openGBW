@@ -340,6 +340,7 @@ extern unsigned long doseVerifiedFrom; // from when the readings are averaged in
 double verifiedDose();                 // that average, what the finished screen judges the grind by
 extern double confirmedDose;    // g, the dose the grind was confirmed with, the delay is calibrated from it
 extern double flowAtSwitchOff;  // g/s, the mass flow at the moment the grinder was switched off
+extern double doseAtSwitchOff;  // g, the dose the line stood at in that moment, the delay is read off it
 extern double delayUsed;     // s, the delay the last grind was stopped with ...
 extern double delayMeasured; // ... and the one its dose says it really was (may be negative),
                              // NAN where it says nothing

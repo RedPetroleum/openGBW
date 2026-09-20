@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "display.hpp" // the recording of the switch-off is fed from the sampler here
 #include "grindlog.hpp"
 #include "rotary.hpp"
 #include "scale.hpp"
@@ -561,6 +562,7 @@ void updateScale(void *parameter) {
                 }
                 double grams = (raw - loadcell.get_offset()) / (double)loadcell.get_scale();
                 grindLogSample(raw, grams);
+                recordSwitchOffReading(grams); // the finished screen draws the switch-off from these
                 rawData.push(grams); // unfiltered, for the steadiness checks
                 sum += grams;
                 taken++;
