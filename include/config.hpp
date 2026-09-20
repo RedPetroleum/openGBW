@@ -49,7 +49,8 @@ struct GrindRecord
 #define GRIND_STYLE_BAR 0    // a bar below the weights (default)
 #define GRIND_STYLE_INVERT 1 // the whole screen is inverted from the bottom up
 #define GRIND_STYLE_FRAME 2  // a border grows out of the middle of the top and bottom edge around the corners
-#define GRIND_STYLE_COUNT 3
+#define GRIND_STYLE_CURVE 3  // the whole grind as a curve, with the set weight and the switch-off in it
+#define GRIND_STYLE_COUNT 4
 #define WEIGHT_DATA_SIZE 128 // readings it keeps, one per pixel column; the grind also works on them
 
 // The Weight History is too wide for the display, so the scale itself turns the pages:

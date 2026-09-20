@@ -188,28 +188,23 @@ void styleMenuOnClick()
     Serial.println("Grinding Screen Menu");
 }
 
-static const char *grindStyleNames[GRIND_STYLE_COUNT] = {"Bar (default)", "Invert", "Frame"};
+static const char *grindStyleNames[GRIND_STYLE_COUNT] = {"Bar (default)", "Invert", "Frame", "Curve"};
 
-// How the grinding screen shows the progress, turning steps through the styles, clicking saves
+// How the grinding screen shows the progress, turning steps through the styles, clicking saves. There
+// are more styles than fit under the title, so the list scrolls around the selection like the menus above
 void showGrindScreenMenu()
 {
+  int prev = (grindScreenStyle + GRIND_STYLE_COUNT - 1) % GRIND_STYLE_COUNT;
+  int next = (grindScreenStyle + 1) % GRIND_STYLE_COUNT;
+
   screen.clearBuffer();
   screen.setFontPosTop();
   screen.setFont(u8g2_font_7x14B_tf);
   CenterPrintToScreen("Grinding Screen", 0);
   screen.setFont(u8g2_font_7x13_tr);
-  for (int i = 0; i < GRIND_STYLE_COUNT; i++)
-  {
-    u8g2_uint_t y = 19 + i * 16;
-    if (i == grindScreenStyle)
-    {
-      LeftPrintActiveToScreen(grindStyleNames[i], y);
-    }
-    else
-    {
-      LeftPrintToScreen(grindStyleNames[i], y);
-    }
-  }
+  LeftPrintToScreen(grindStyleNames[prev], 19);
+  LeftPrintActiveToScreen(grindStyleNames[grindScreenStyle], 35);
+  LeftPrintToScreen(grindStyleNames[next], 51);
   screen.sendBuffer();
 }
 
@@ -919,6 +914,147 @@ static void showGrindProgress(float progress, bool complete)
   }
 }
 
+
+// The grind as a curve: how the weight in the cup grew over the whole grind, with the set weight as a
+// dashed line and the moment the grinder was switched off marked in it. The readings are recorded while
+// grinding and drawn stretched over the width, so the curve always spans the whole grind - it only gets
+// wider as long as the grind is shorter than CURVE_MIN_SPAN_MS, after that the time axis stretches.
+#define CURVE_SAMPLES 256    // recorded readings, a grind longer than that halves its resolution
+#define CURVE_SAMPLE_MS 100  // time between two recorded readings at the start
+#define CURVE_MIN_SPAN_MS 5000 // time the width covers at least, so a short grind is not blown up
+#define CURVE_TOP 10         // rows the curve is drawn in ...
+#define CURVE_BOTTOM 52
+#define CURVE_BASELINE 54    // ... and the dotted line under it
+#define CURVE_HEADROOM 1.15f // how much of the height above the set weight stays free for the overshoot
+
+static int16_t curveWeights[CURVE_SAMPLES]; // recorded weights in hundredths of a gram
+static int curveSampleMs = CURVE_SAMPLE_MS; // time one recorded reading stands for at the moment
+static int curveCount = 0;                  // readings recorded so far
+static long curveOffMs = -1;                // time the grinder was switched off at, -1 while it still runs
+
+static void resetGrindCurve()
+{
+  curveSampleMs = CURVE_SAMPLE_MS;
+  curveCount = 0;
+  curveOffMs = -1;
+}
+
+// Records the current weight. A grind that is longer than the buffer keeps every second reading and
+// records half as often from then on, so however long it takes the whole grind stays in the curve.
+static void recordGrindCurve(unsigned long elapsed, float weight)
+{
+  while (elapsed / curveSampleMs >= CURVE_SAMPLES)
+  {
+    for (int i = 0; i < CURVE_SAMPLES / 2; i++)
+    {
+      curveWeights[i] = curveWeights[i * 2 + 1];
+    }
+    curveCount = CURVE_SAMPLES / 2;
+    curveSampleMs *= 2;
+  }
+  int index = elapsed / curveSampleMs;
+  for (int i = curveCount; i <= index; i++) // readings missed by a slow frame keep the last weight
+  {
+    curveWeights[i] = (int16_t)lroundf(weight * 100);
+  }
+  curveCount = index + 1;
+}
+
+// The whole grinding screen in the curve style, drawn instead of the weights and the progress
+static void showGrindCurve(bool verifying)
+{
+  char buf[16];
+  double weight = shownWeight - cupWeightEmpty;
+  // The curve keeps growing while verifying: what falls after the switch-off belongs to the grind
+  unsigned long elapsed = startedGrindingAt > 0 ? millis() - startedGrindingAt : 0;
+  unsigned long grindMs = verifying && startedGrindingAt > 0 ? finishedGrindingAt - startedGrindingAt : elapsed;
+  recordGrindCurve(elapsed, weight);
+  if (verifying && curveOffMs < 0)
+  {
+    curveOffMs = grindMs; // the grinder went off when the screen started verifying
+  }
+
+  // The set weight sits below the top edge, the overshoot has to fit in as well
+  float top = max((float)(setWeight * CURVE_HEADROOM), 1.0f); // setWeight is a double, max() needs one type
+  for (int i = 0; i < curveCount; i++)
+  {
+    top = max(top, curveWeights[i] / 100.0f);
+  }
+  long span = max((long)elapsed, (long)CURVE_MIN_SPAN_MS); // time the width covers
+  auto curveX = [&](long ms) { return (int)(ms * 127 / span); };
+  auto curveY = [&](float grams) {
+    int y = CURVE_BOTTOM - (int)(grams / top * (CURVE_BOTTOM - CURVE_TOP));
+    return constrain(y, CURVE_TOP, CURVE_BOTTOM);
+  };
+
+  screen.clearBuffer();
+  screen.setFontPosTop();
+  screen.setFont(u8g2_font_5x7_tf);
+  snprintf(buf, sizeof(buf), "%.1fg", noMinusZero(weight));
+  LeftPrintToScreen(buf, 0);
+  snprintf(buf, sizeof(buf), "%.1fg", setWeight);
+  RightPrintToScreen(buf, 0);
+
+  // The set weight as a dashed line
+  int targetY = curveY(setWeight);
+  for (int x = 0; x < 128; x += 4)
+  {
+    screen.drawPixel(x, targetY);
+    screen.drawPixel(x + 1, targetY);
+  }
+
+  // The curve, after the switch-off dotted: that part is what still fell out of the grinder
+  int previousX = 0;
+  int previousY = curveY(curveWeights[0] / 100.0f);
+  for (int i = 1; i < curveCount; i++)
+  {
+    int x = curveX((long)i * curveSampleMs);
+    int y = curveY(curveWeights[i] / 100.0f);
+    if (curveOffMs >= 0 && (long)i * curveSampleMs > curveOffMs)
+    {
+      if (x % 2 == 0)
+      {
+        screen.drawPixel(x, y);
+      }
+    }
+    else
+    {
+      screen.drawLine(previousX, previousY, x, y);
+    }
+    previousX = x;
+    previousY = y;
+  }
+
+  // The moment the grinder was switched off
+  if (curveOffMs >= 0)
+  {
+    int offX = curveX(curveOffMs);
+    for (int y = CURVE_TOP; y <= CURVE_BOTTOM; y += 3)
+    {
+      screen.drawPixel(offX, y);
+    }
+    int offIndex = constrain((int)(curveOffMs / curveSampleMs), 0, max(0, curveCount - 1));
+    screen.drawBox(offX - 1, curveY(curveWeights[offIndex] / 100.0f) - 1, 3, 3);
+  }
+
+  // The ground the curve stands on, dotted so it stays behind the curve
+  for (int x = 0; x < 128; x += 2)
+  {
+    screen.drawPixel(x, CURVE_BASELINE);
+  }
+
+  // The numbers of the grind: how long it took, how fast it ran and how far it is from the set weight
+  screen.setCursor(0, 57);
+  snprintf(buf, sizeof(buf), "%.1fs", grindMs / 1000.0); // the grinding time, it stands still while verifying
+  screen.print(buf);
+  screen.setCursor(42, 57);
+  snprintf(buf, sizeof(buf), "%.1fg/s", grindMs > 500 ? weight / (grindMs / 1000.0) : 0.0);
+  screen.print(buf);
+  screen.setCursor(95, 57);
+  snprintf(buf, sizeof(buf), "%+.1fg", noMinusZero(weight - setWeight));
+  screen.print(buf);
+}
+
 // Draws the current state once (also used by the display simulator in sim/)
 void refreshDisplay()
 {
@@ -956,6 +1092,13 @@ void refreshDisplay()
       // The grinder has already stopped while verifying, only the reading still has to settle
       bool verifying = scaleStatus == STATUS_GRINDING_VERIFYING;
 
+      if (grindScreenStyle == GRIND_STYLE_CURVE)
+      {
+        showGrindCurve(verifying); // draws the whole screen, the weights and the progress are in the curve
+        screen.sendBuffer();
+        return;
+      }
+
       screen.setFontPosTop();
       screen.setFont(u8g2_font_7x13_tr);
       CenterPrintToScreen(verifying ? "Verifying..." : "Grinding...", 0);
@@ -989,6 +1132,7 @@ void refreshDisplay()
     else if (scaleStatus == STATUS_EMPTY)
     {
       grindProgressShown = 0; // the next grind starts at the beginning again
+      resetGrindCurve();
 
       screen.setFontPosTop();
       screen.setFont(u8g2_font_7x13_tr);

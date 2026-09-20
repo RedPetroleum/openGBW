@@ -19,6 +19,24 @@ draw; shot grinding-finished
 set scaleStatus 3; set grindFailReason Cup removed
 draw; shot grinding-failed
 
+[grinding screen styles]
+# a recorded grind (logs/, shot 327) in the curve style of the Style menu, one reading every 360ms
+set grindScreenStyle 3; set setWeight 18.2
+boot 200; weight 76.3; wait 3200
+set cupWeightEmpty 76.3; set scaleStatus 1; set grindTime 0
+weight 76.4; wait 360; weight 76.7; wait 360; weight 76.6; wait 360; weight 76.3; wait 360
+weight 76.4; wait 360; weight 76.4; wait 360; weight 76.3; wait 360; weight 76.4; wait 360
+weight 76.3; wait 360; weight 76.4; wait 360; weight 76.6; wait 360; weight 77.0; wait 360
+weight 76.8; wait 360; weight 77.5; wait 360; weight 77.5; wait 360; weight 78.6; wait 360
+weight 79.0; wait 360; weight 79.1; wait 360; weight 80.4; wait 360; weight 80.6; wait 360
+weight 80.6; wait 360; weight 81.2; wait 360; weight 82.2; wait 360; weight 83.5; wait 360
+weight 83.5; wait 360; weight 83.8; wait 360; weight 84.4; wait 360; weight 87.2; wait 360
+weight 87.4; wait 360; weight 87.3; wait 360; weight 90.6; wait 360; weight 91.9; wait 360
+weight 94.2; wait 360; draw; shot grinding-curve-running # the grinder is still on
+set scaleStatus 6; set grindTime 12.5 # switched off, the rest falls out of the grinder
+weight 94.7; wait 360; weight 94.7; wait 360; weight 94.5; wait 360; weight 94.7; wait 360
+weight 94.7; wait 360; weight 94.7; wait 360; weight 94.8; wait 360; weight 94.8; wait 360
+draw; shot grinding-curve
 [menu]
 click; shot menu
 turn 1; click; shot cup-weight-1
